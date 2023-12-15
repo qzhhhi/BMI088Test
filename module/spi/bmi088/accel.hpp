@@ -1,0 +1,154 @@
+#pragma once
+
+#include <cassert>
+#include <cstdint>
+
+#include <spi.h>
+#include <usbd_cdc.h>
+
+#include "module/spi/spi.hpp"
+
+extern USBD_HandleTypeDef hUsbDeviceFS;
+
+namespace module {
+namespace bmi088 {
+
+class Accelerometer : SpiModuleInterface {
+public:
+    Accelerometer()
+        : SpiModuleInterface(CS1_ACCEL_GPIO_Port, CS1_ACCEL_Pin)
+        , initialized_(false)
+        , init_rx_buffer_(nullptr)
+        , init_rx_size_(0) {
+
+        constexpr int max_try_time = 3;
+
+        auto read_with_confirm = [this](RegisterAddress address, uint8_t value) {
+            for (int i = max_try_time; i-- > 0;) {
+                if (!read<SpiTransmitReceiveMode::BLOCK>(address, 1))
+                    return false;
+                assert(init_rx_buffer_ && init_rx_size_ == 3);
+                if (init_rx_buffer_[2] == value)
+                    return true;
+                HAL_Delay(2);
+            }
+            return false;
+        };
+        auto write_with_confirm = [this](RegisterAddress address, uint8_t value) {
+            for (int i = max_try_time; i-- > 0;) {
+                if (!write<SpiTransmitReceiveMode::BLOCK>(address, value))
+                    return false;
+                HAL_Delay(2);
+                if (!read<SpiTransmitReceiveMode::BLOCK>(address, 1))
+                    return false;
+                assert(init_rx_buffer_ && init_rx_size_ == 3);
+                if (init_rx_buffer_[2] == value)
+                    return true;
+            }
+            return false;
+        };
+
+        // Dummy read to switch accelerometer to SPI mode
+        read<SpiTransmitReceiveMode::BLOCK>(RegisterAddress::ACC_CHIP_ID, 1);
+        // I don’t know how long the delay should be.
+        HAL_Delay(2);
+
+        // Reset all registers to reset value
+        write<SpiTransmitReceiveMode::BLOCK>(RegisterAddress::ACC_SOFTRESET, 0xB6);
+        // At least 1 ms delay.
+        HAL_Delay(2);
+
+        // "Who am I" check.
+        assert(read_with_confirm(RegisterAddress::ACC_CHIP_ID, 0x1E));
+
+        // Enable INT1 as output pin, push-pull, active-low.
+        assert(write_with_confirm(RegisterAddress::INT1_IO_CTRL, 0b00001000));
+        // Map data ready interrupt to pin INT1.
+        assert(write_with_confirm(RegisterAddress::INT_MAP_DATA, 0b00000100));
+
+        // Set ODR (output data rate) = 1600 and OSR (over-sampling-ratio) = 1.
+        assert(write_with_confirm(RegisterAddress::ACC_CONF, 0x80 | (0x02 << 4) | (0x0C << 0)));
+        // Set Accelerometer range to 6G.
+        assert(write_with_confirm(RegisterAddress::ACC_RANGE, 0x01));
+
+        // Switch the accelerometer into active mode.
+        assert(write_with_confirm(RegisterAddress::ACC_PWR_CONF, 0x00));
+        // Turn on the accelerometer.
+        assert(write_with_confirm(RegisterAddress::ACC_PWR_CTRL, 0x04));
+
+        initialized_ = true;
+        HAL_GPIO_WritePin(LED_R_GPIO_Port, LED_R_Pin, GPIO_PIN_SET);
+    }
+
+    static constexpr auto hal_spi_handle = &hspi1;
+
+    void transmit_receive_callback(uint8_t* rx_buffer, size_t size) override {
+        if (initialized_) {
+            print_buffer('>', rx_buffer, size);
+        } else {
+            init_rx_buffer_ = rx_buffer;
+            init_rx_size_   = size;
+        }
+    }
+
+    void get_value() {
+        read<SpiTransmitReceiveMode::INTERRUPT>(RegisterAddress::ACC_X_LSB, 6);
+    }
+
+private:
+    enum class RegisterAddress : uint8_t {
+        ACC_SOFTRESET  = 0x7E,
+        ACC_PWR_CTRL   = 0x7D,
+        ACC_PWR_CONF   = 0x7C,
+        ACC_SELF_TEST  = 0x6D,
+        INT_MAP_DATA   = 0x58,
+        INT2_IO_CTRL   = 0x54,
+        INT1_IO_CTRL   = 0x53,
+        ACC_RANGE      = 0x41,
+        ACC_CONF       = 0x40,
+        TEMP_LSB       = 0x23,
+        TEMP_MSB       = 0x22,
+        ACC_INT_STAT_1 = 0x1D,
+        SENSORTIME_2   = 0x1A,
+        SENSORTIME_1   = 0x19,
+        SENSORTIME_0   = 0x18,
+        ACC_Z_MSB      = 0x17,
+        ACC_Z_LSB      = 0x16,
+        ACC_Y_MSB      = 0x15,
+        ACC_Y_LSB      = 0x14,
+        ACC_X_MSB      = 0x13,
+        ACC_X_LSB      = 0x12,
+        ACC_STATUS     = 0x03,
+        ACC_ERR_REG    = 0x02,
+        ACC_CHIP_ID    = 0x00
+    };
+
+    template <SpiTransmitReceiveMode mode>
+    bool write(RegisterAddress address, uint8_t value) {
+        auto& spi = Spi<hal_spi_handle>::Singleton::get_instance();
+        if (auto task = spi.create_transmit_receive_task<mode>(this, 2)) {
+            task->tx_buffer[0] = static_cast<uint8_t>(address);
+            task->tx_buffer[1] = value;
+            return true;
+        }
+        return false;
+    }
+
+    template <SpiTransmitReceiveMode mode>
+    bool read(RegisterAddress address, size_t read_size) {
+        auto& spi = Spi<hal_spi_handle>::Singleton::get_instance();
+        if (auto task = spi.create_transmit_receive_task<mode>(this, read_size + 2)) {
+            task->tx_buffer[0] = 0x80 | static_cast<uint8_t>(address);
+            return true;
+        }
+        return false;
+    }
+
+    bool initialized_;
+
+    uint8_t* init_rx_buffer_;
+    size_t init_rx_size_;
+};
+
+} // namespace bmi088
+} // namespace module
