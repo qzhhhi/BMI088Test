@@ -7,7 +7,7 @@
 #include <spi.h>
 #include <usbd_cdc.h>
 
-#include "utility/singleton/singleton.hpp"
+#include "utility/immovable.hpp"
 
 extern USBD_HandleTypeDef hUsbDeviceFS;
 inline static void print_buffer(char flag, uint8_t* buffer, size_t size) {
@@ -27,11 +27,6 @@ inline static void print_buffer(char flag, uint8_t* buffer, size_t size) {
     USBD_CDC_SetTxBuffer(
         &hUsbDeviceFS, reinterpret_cast<uint8_t*>(string_buffer), p - string_buffer);
     USBD_CDC_TransmitPacket(&hUsbDeviceFS);
-
-    // USBD_CDC_HandleTypeDef* hcdc =
-    //     (USBD_CDC_HandleTypeDef*)hUsbDeviceFS.pClassDataCmsit[hUsbDeviceFS.classId];
-    // while (hcdc->TxState)
-    //     ;
 }
 
 namespace module {
@@ -50,11 +45,13 @@ public:
 
 enum class SpiTransmitReceiveMode { BLOCK, INTERRUPT };
 
-template <SPI_HandleTypeDef* hal_spi_handle>
 class Spi : private utility::Immovable {
 public:
-    friend class utility::Singleton<Spi>;
-    using Singleton = utility::Singleton<Spi>;
+    Spi(SPI_HandleTypeDef* hal_spi_handle)
+        : hal_spi_handle_(hal_spi_handle)
+        , ready_(hal_spi_handle->State == HAL_SPI_STATE_READY)
+        , spi_module_(nullptr)
+        , tx_rx_size_(0) {}
 
     template <SpiTransmitReceiveMode mode>
     class TransmitReceiveTask {
@@ -79,12 +76,12 @@ public:
 
                 if constexpr (mode == SpiTransmitReceiveMode::BLOCK) {
                     HAL_SPI_TransmitReceive(
-                        hal_spi_handle, spi_->tx_data_buffer_, spi_->rx_data_buffer_,
+                        spi_->hal_spi_handle_, spi_->tx_data_buffer_, spi_->rx_data_buffer_,
                         spi_->tx_rx_size_, HAL_MAX_DELAY);
                     spi_->transmit_receive_callback();
                 } else if constexpr (mode == SpiTransmitReceiveMode::INTERRUPT) {
                     HAL_SPI_TransmitReceive_IT(
-                        hal_spi_handle, tx_buffer, spi_->rx_data_buffer_, spi_->tx_rx_size_);
+                        spi_->hal_spi_handle_, tx_buffer, spi_->rx_data_buffer_, spi_->tx_rx_size_);
                 }
             }
         }
@@ -125,8 +122,6 @@ public:
     bool ready() const { return ready_; }
 
 private:
-    Spi() = default;
-
     void start_transmit_receive() {
         HAL_GPIO_WritePin(
             spi_module_->chip_select_port, spi_module_->chip_select_pin, GPIO_PIN_RESET);
@@ -135,17 +130,19 @@ private:
     void stop_transmit_receive() {
         HAL_GPIO_WritePin(
             spi_module_->chip_select_port, spi_module_->chip_select_pin, GPIO_PIN_SET);
-        ready_ = hal_spi_handle->State == HAL_SPI_STATE_READY;
+        ready_ = hal_spi_handle_->State == HAL_SPI_STATE_READY;
     }
 
-    bool ready_ = hal_spi_handle->State == HAL_SPI_STATE_READY;
+    SPI_HandleTypeDef* hal_spi_handle_;
+
+    bool ready_;
 
     SpiModuleInterface* spi_module_;
     size_t tx_rx_size_;
 
-    static constexpr size_t max_buffer_size_ = 10;
-    uint8_t tx_data_buffer_[max_buffer_size_];
-    uint8_t rx_data_buffer_[max_buffer_size_];
+    static constexpr size_t max_buffer_size_ = 16;
+    alignas(4) uint8_t tx_data_buffer_[max_buffer_size_];
+    alignas(4) uint8_t rx_data_buffer_[max_buffer_size_];
 };
 
 } // namespace module

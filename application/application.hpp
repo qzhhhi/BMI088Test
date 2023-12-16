@@ -1,6 +1,9 @@
 #pragma once
 
-#include "utility/singleton/singleton.hpp"
+#include "module/spi/bmi088/accel.hpp"
+#include "module/spi/spi.hpp"
+#include "utility/singleton.hpp"
+#include "utility/immovable.hpp"
 
 class Application : private utility::Immovable {
 public:
@@ -9,6 +12,9 @@ public:
 
     void main();
 
-protected:
+    module::Spi spi;
+    module::bmi088::Accelerometer accel;
+
+private:
     Application();
 };

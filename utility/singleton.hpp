@@ -7,6 +7,8 @@
 
 #include <cmsis_gcc.h>
 
+#include "utility/interrupt_lock.hpp"
+
 namespace utility {
 
 template <typename T>
@@ -22,10 +24,9 @@ public:
 
     static T& get_instance() {
         if (!initialized_) {
-            __disable_irq();
+            InterruptLock lock;
             new (class_data_) T{};
             initialized_ = true;
-            __enable_irq();
         }
         return *reinterpret_cast<T*>(class_data_);
     }
@@ -41,13 +42,4 @@ public:
     inline static bool initialized_ = false;
 };
 
-class Immovable {
-public:
-    Immovable()                            = default;
-    Immovable(const Immovable&)            = delete;
-    Immovable& operator=(const Immovable&) = delete;
-    Immovable(Immovable&&)                 = delete;
-    Immovable& operator=(Immovable&&)      = delete;
-};
-
-} // namespace util
+} // namespace utility

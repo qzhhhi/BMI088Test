@@ -3,26 +3,24 @@
 #include <main.h>
 #include <spi.h>
 
-#include "module/spi/bmi088/accel.hpp"
-#include "module/spi/spi.hpp"
-#include "stm32f4xx_hal.h"
+#include "module/timer/us_delay.hpp"
 
 void AppEntry() {
     auto& app = Application::Singleton::get_instance();
     app.main();
 }
 
-Application::Application() { HAL_GPIO_WritePin(LED_B_GPIO_Port, LED_B_Pin, GPIO_PIN_SET); }
+Application::Application()
+    : spi(&hspi1)
+    , accel(spi) {
+    HAL_GPIO_WritePin(LED_B_GPIO_Port, LED_B_Pin, GPIO_PIN_SET);
+}
 
 void Application::main() {
-    HAL_Delay(5000);
-
-    module::bmi088::Accelerometer accel;
-    using module::SpiTransmitReceiveMode;
-    using module::bmi088::Accelerometer;
-
     while (true) {
+        using namespace std::chrono_literals;
+        module::timer::us_delay(500ms);
+        HAL_GPIO_TogglePin(LED_G_GPIO_Port, LED_G_Pin);
         accel.get_value();
-        HAL_Delay(100);
     }
 }
