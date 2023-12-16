@@ -3,16 +3,15 @@
 #include <main.h>
 #include <spi.h>
 
+#include "module/spi/spi.hpp"
 #include "module/timer/us_delay.hpp"
 
 void AppEntry() {
-    auto& app = Application::Singleton::get_instance();
-    app.main();
+    application->main();
 }
 
 Application::Application()
-    : spi(&hspi1)
-    , accel(spi) {
+    : accel(*module::spi::spi1) {
     HAL_GPIO_WritePin(LED_B_GPIO_Port, LED_B_Pin, GPIO_PIN_SET);
 }
 

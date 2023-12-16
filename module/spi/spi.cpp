@@ -5,8 +5,7 @@
 
 void HAL_SPI_TxRxCpltCallback(SPI_HandleTypeDef* hspi) {
     if (hspi == &hspi1) {
-        Application::Singleton::weak_instance([](Application* app) {
-            app->spi.transmit_receive_callback();
-        });
+        module::spi::spi1.weak_execute(
+            [](module::spi::Spi* spi) { spi->transmit_receive_callback(); });
     }
 }

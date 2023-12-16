@@ -8,6 +8,7 @@
 #include <usbd_cdc.h>
 
 #include "utility/immovable.hpp"
+#include "utility/lazy.hpp"
 
 extern USBD_HandleTypeDef hUsbDeviceFS;
 inline static void print_buffer(char flag, uint8_t* buffer, size_t size) {
@@ -30,6 +31,7 @@ inline static void print_buffer(char flag, uint8_t* buffer, size_t size) {
 }
 
 namespace module {
+namespace spi {
 
 class SpiModuleInterface {
 public:
@@ -145,4 +147,7 @@ private:
     alignas(4) uint8_t rx_data_buffer_[max_buffer_size_];
 };
 
+inline utility::Lazy<Spi, SPI_HandleTypeDef*> spi1(&hspi1);
+
+} // namespace spi
 } // namespace module

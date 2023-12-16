@@ -13,6 +13,7 @@
 extern USBD_HandleTypeDef hUsbDeviceFS;
 
 namespace module {
+namespace spi {
 namespace bmi088 {
 
 class Accelerometer : SpiModuleInterface {
@@ -103,9 +104,9 @@ public:
         if (initialized_) {
             assert(size == sizeof(AccelerometerData) + 2);
             auto& data  = *reinterpret_cast<AccelerometerData*>(rx_buffer + 2);
-            float acc_x = data.x / 32767.0f * 6.0f;
-            float acc_y = data.y / 32767.0f * 6.0f;
-            float acc_z = data.z / 32767.0f * 6.0f;
+            // float acc_x = data.x / 32767.0f * 6.0f;
+            // float acc_y = data.y / 32767.0f * 6.0f;
+            // float acc_z = data.z / 32767.0f * 6.0f;
 
             static char string_buffer[64];
             sprintf(string_buffer, "%d %d %d\n", data.x, data.y, data.z);
@@ -186,4 +187,5 @@ private:
 };
 
 } // namespace bmi088
+} // namespace spi
 } // namespace module

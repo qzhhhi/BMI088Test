@@ -11,7 +11,7 @@ namespace module {
 namespace timer {
 
 inline void us_delay(std::chrono::duration<uint32_t, std::micro> delay) {
-    auto& timer = Timer<&htim2>::Singleton::get_instance();
+    auto& timer = *timer2.get();
 
     uint32_t start = timer.get_tick();
     uint32_t end   = start + delay.count();
