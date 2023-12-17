@@ -49,9 +49,11 @@ enum class SpiTransmitReceiveMode { BLOCK, INTERRUPT };
 
 class Spi : private utility::Immovable {
 public:
+    using Lazy = utility::Lazy<Spi, SPI_HandleTypeDef*>;
+
     Spi(SPI_HandleTypeDef* hal_spi_handle)
         : hal_spi_handle_(hal_spi_handle)
-        , ready_(hal_spi_handle->State == HAL_SPI_STATE_READY)
+        , task_created_(false)
         , spi_module_(nullptr)
         , tx_rx_size_(0) {}
 
@@ -83,12 +85,15 @@ public:
                     spi_->transmit_receive_callback();
                 } else if constexpr (mode == SpiTransmitReceiveMode::INTERRUPT) {
                     HAL_SPI_TransmitReceive_IT(
-                        spi_->hal_spi_handle_, tx_buffer, spi_->rx_data_buffer_, spi_->tx_rx_size_);
+                        spi_->hal_spi_handle_, spi_->tx_data_buffer_, spi_->rx_data_buffer_,
+                        spi_->tx_rx_size_);
                 }
+
+                spi_->task_created_ = false;
             }
         }
 
-        uint8_t* const tx_buffer;
+        uint8_t* tx_buffer;
 
     private:
         TransmitReceiveTask(Spi* spi)
@@ -104,13 +109,22 @@ public:
 
         assert(max_buffer_size_ >= size);
 
-        if (__sync_bool_compare_and_swap(&ready_, true, false)) {
-            spi_module_ = module;
-            tx_rx_size_ = size;
-            return TransmitReceiveTask<mode>(this);
-        } else {
-            return std::nullopt;
+        if (__sync_bool_compare_and_swap(&task_created_, false, true)) {
+            if (hal_ready()) {
+                // The function transmit_receive_callback has a very low probability of not being
+                // called. Therefore, before creating a new task, release the chip select pin again
+                // to ensure correct data transmission.
+                if (spi_module_)
+                    stop_transmit_receive();
+
+                spi_module_ = module;
+                tx_rx_size_ = size;
+                return TransmitReceiveTask<mode>(this);
+            } else {
+                task_created_ = false;
+            }
         }
+        return std::nullopt;
     }
 
     void transmit_receive_callback() {
@@ -121,9 +135,9 @@ public:
         spi_module_->transmit_receive_callback(rx_data_buffer_, tx_rx_size_);
     }
 
-    bool ready() const { return ready_; }
-
 private:
+    bool hal_ready() const { return hal_spi_handle_->State == HAL_SPI_STATE_READY; }
+
     void start_transmit_receive() {
         HAL_GPIO_WritePin(
             spi_module_->chip_select_port, spi_module_->chip_select_pin, GPIO_PIN_RESET);
@@ -132,12 +146,11 @@ private:
     void stop_transmit_receive() {
         HAL_GPIO_WritePin(
             spi_module_->chip_select_port, spi_module_->chip_select_pin, GPIO_PIN_SET);
-        ready_ = hal_spi_handle_->State == HAL_SPI_STATE_READY;
     }
 
     SPI_HandleTypeDef* hal_spi_handle_;
 
-    bool ready_;
+    bool task_created_;
 
     SpiModuleInterface* spi_module_;
     size_t tx_rx_size_;
@@ -147,7 +160,7 @@ private:
     alignas(4) uint8_t rx_data_buffer_[max_buffer_size_];
 };
 
-inline utility::Lazy<Spi, SPI_HandleTypeDef*> spi1(&hspi1);
+inline Spi::Lazy spi1(&hspi1);
 
 } // namespace spi
 } // namespace module

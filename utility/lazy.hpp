@@ -1,7 +1,6 @@
 #pragma once
 
 #include <algorithm>
-#include <atomic>
 #include <cassert>
 #include <cstdint>
 #include <tuple>
@@ -60,12 +59,12 @@ private:
     using ArgTupleT = std::tuple<Args...>;
 
     enum class InitStatus : uint8_t { UNINITIALIZE = 0, INITIALIZING = 1, INITIALIZED = 2 };
-    std::atomic<InitStatus> init_status_;
+    InitStatus init_status_;
 
     static constexpr auto alignment = std::max(alignof(T), alignof(ArgTupleT));
     static constexpr auto data_size = std::max(sizeof(T), sizeof(ArgTupleT));
 
-    alignas(alignment) char data_[data_size];
+    alignas(alignment) uint8_t data_[data_size];
 };
 
 } // namespace utility
