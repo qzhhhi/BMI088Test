@@ -1,3 +1,9 @@
+/**
+ * @author Qzh (zihanqin2048@gmail.com)
+ * @brief The assertion error handling.
+ * @copyright Copyright (c) 2023 by Alliance, All Rights Reserved.
+ */
+
 #include <cassert>
 
 #include <main.h>
