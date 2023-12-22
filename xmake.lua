@@ -1,9 +1,9 @@
 -- requires xmake v2.8.5+
 ---@diagnostic disable: undefined-global
-add_rules("plugin.compile_commands.autoupdate", { lsp = "clangd", outputdir = "." })
+-- add_rules("plugin.compile_commands.autoupdate", { lsp = "clangd", outputdir = "." })
 set_policy("build.warning", true)
 set_policy("check.auto_ignore_flags", false)
-set_languages("c11", "c++20")
+set_languages("c11", "c++17")
 
 set_config("plat", "cross")           -- 交叉编译
 set_config("cross", "arm-none-eabi-") -- 设置交叉编译平台
@@ -22,9 +22,10 @@ target("application", function()
 
     -- 从CubeMX生成的Makefile中读取hal的源文件和头文件
     on_load("script.read_hal_makefile")
+    after_build("script.update_compile_commands_with_system_includes")
 
     -- 添加源文件和头文件
-    add_files("application/**.cpp", "module/**.cpp", "utility/**.cpp")
+    add_files("application/**.cpp", "device/**.cpp", "utility/**.cpp")
     add_includedirs(".")
 
     -- 在任何模式下都生成调试信息
