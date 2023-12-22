@@ -7,13 +7,13 @@
 #include <spi.h>
 #include <usbd_cdc.h>
 
-#include "module/spi/spi.hpp"
-#include "module/timer/us_delay.hpp"
+#include "device/spi/spi.hpp"
+#include "device/timer/us_delay.hpp"
 
 extern USBD_HandleTypeDef hUsbDeviceFS;
 extern float acc_x, acc_y, acc_z;
 
-namespace module {
+namespace device {
 namespace spi {
 namespace bmi088 {
 
@@ -51,7 +51,7 @@ public:
                 assert(init_rx_buffer_ && init_rx_size_ == 3);
                 if (init_rx_buffer_[2] == value)
                     return true;
-                module::timer::us_delay(1ms);
+                device::timer::us_delay(1ms);
             }
             return false;
         };
@@ -59,7 +59,7 @@ public:
             for (int i = max_try_time; i-- > 0;) {
                 if (!write<SpiTransmitReceiveMode::BLOCK>(address, value))
                     return false;
-                module::timer::us_delay(1ms);
+                device::timer::us_delay(1ms);
                 if (!read<SpiTransmitReceiveMode::BLOCK>(address, 1))
                     return false;
                 assert(init_rx_buffer_ && init_rx_size_ == 3);
@@ -71,11 +71,11 @@ public:
 
         // Dummy read to switch accelerometer to SPI mode
         read<SpiTransmitReceiveMode::BLOCK>(RegisterAddress::ACC_CHIP_ID, 1);
-        module::timer::us_delay(1ms);
+        device::timer::us_delay(1ms);
 
         // Reset all registers to reset value
         write<SpiTransmitReceiveMode::BLOCK>(RegisterAddress::ACC_SOFTRESET, 0xB6);
-        module::timer::us_delay(1ms);
+        device::timer::us_delay(1ms);
 
         // "Who am I" check.
         assert(read_with_confirm(RegisterAddress::ACC_CHIP_ID, 0x1E));
@@ -195,4 +195,4 @@ inline Accelerometer::Lazy accelerometer(&spi1);
 
 } // namespace bmi088
 } // namespace spi
-} // namespace module
+} // namespace device

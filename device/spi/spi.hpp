@@ -30,7 +30,7 @@ inline static void print_buffer(char flag, uint8_t* buffer, size_t size) {
     USBD_CDC_TransmitPacket(&hUsbDeviceFS);
 }
 
-namespace module {
+namespace device {
 namespace spi {
 
 class SpiModuleInterface {
@@ -163,4 +163,4 @@ private:
 inline Spi::Lazy spi1(&hspi1);
 
 } // namespace spi
-} // namespace module
+} // namespace device

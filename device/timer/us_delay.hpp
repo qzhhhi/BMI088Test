@@ -5,9 +5,9 @@
 #include <chrono>
 #include <ratio>
 
-#include "module/timer/timer.hpp"
+#include "device/timer/timer.hpp"
 
-namespace module {
+namespace device {
 namespace timer {
 
 inline void us_delay(std::chrono::duration<uint32_t, std::micro> delay) {
@@ -26,4 +26,4 @@ inline void us_delay(std::chrono::duration<uint32_t, std::micro> delay) {
 }
 
 } // namespace timer
-} // namespace module
+} // namespace device
