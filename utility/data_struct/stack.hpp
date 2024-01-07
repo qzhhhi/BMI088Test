@@ -14,11 +14,13 @@
 
 #include <new>
 
+#include "utility/immovable.hpp"
+
 namespace utility {
 namespace data_struct {
 
 template <typename T, size_t max_size>
-class Stack {
+class Stack : Immovable {
 public:
     Stack() = default;
     ~Stack() noexcept {

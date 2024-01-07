@@ -10,6 +10,7 @@
 
 #include <memory>
 #include <new>
+#include <utility>
 
 #include "utility/memory/fixed_size_pool.hpp"
 
@@ -26,21 +27,41 @@ struct TypedPoolDeclaration {
 
 template <typename T>
 class TypedPool {
+private:
+    static inline FixedSizeMemoryPool<
+        sizeof(T), TypedPoolDeclaration<T>::max_element_count, alignof(T)>
+        pool_{};
+    struct Destroy {
+        void operator()(T* ptr) {
+            ptr->~T();
+            pool_.dealloc(static_cast<void*>(ptr));
+        }
+    };
+
 public:
+    using UniquePtr = std::unique_ptr<T, Destroy>;
+
     TypedPool() = delete;
 
+    static UniquePtr make_unique_from_raw(T* pointer) { return UniquePtr{pointer}; }
+
     template <typename... Args>
-    static auto make_unique(Args&&... args) {
-        static auto pool = FixedSizeMemoryPool<
-            sizeof(T), TypedPoolDeclaration<T>::max_element_count, alignof(T)>();
-        auto destroy = [](T* ptr) {
-            ptr->~T();
-            pool.dealloc(static_cast<void*>(ptr));
-        };
-        auto raw_pointer = static_cast<T*>(pool.alloc());
-        new (raw_pointer) T{std::forward<Args>(args)...};
-        return std::unique_ptr<T, decltype(destroy)>(raw_pointer, destroy);
+    static UniquePtr make_unique(Args&&... args) {
+        return make_unique_from_raw(make_raw(std::forward<Args>(args)...));
     }
+
+    template <typename... Args>
+    static T* make_raw(Args&&... args) {
+        auto pointer = static_cast<T*>(pool_.alloc());
+        if (pointer) {
+            new (pointer) T{std::forward<Args>(args)...};
+        }
+        return pointer;
+    }
+
+    static void destroy_raw(T* pointer) { destroy_(pointer); }
+
+    static size_t free_count() { return pool_.free_count(); }
 };
 
 } // namespace memory

@@ -35,6 +35,10 @@ public:
         free_block_stack_.push(static_cast<block_id_t>(block_id));
     }
 
+    size_t free_count() {
+        return free_block_stack_.size();
+    }
+
 private:
     static constexpr auto get_block_id_t() {
         if constexpr (max_block_count > static_cast<uint64_t>(UINT32_MAX) + 1) {

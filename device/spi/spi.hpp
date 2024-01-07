@@ -10,25 +10,25 @@
 #include "utility/immovable.hpp"
 #include "utility/lazy.hpp"
 
-extern USBD_HandleTypeDef hUsbDeviceFS;
-inline static void print_buffer(char flag, uint8_t* buffer, size_t size) {
-    static char string_buffer[128];
-    char* p = string_buffer;
+// extern USBD_HandleTypeDef hUsbDeviceFS;
+// inline static void print_buffer(char flag, uint8_t* buffer, size_t size) {
+//     static char string_buffer[128];
+//     char* p = string_buffer;
 
-    *p++ = flag;
-    *p++ = ' ';
+//     *p++ = flag;
+//     *p++ = ' ';
 
-    for (size_t i = 0; i < size; i++) {
-        sprintf(p, "%02X ", buffer[i]);
-        p += 3;
-    }
+//     for (size_t i = 0; i < size; i++) {
+//         sprintf(p, "%02X ", buffer[i]);
+//         p += 3;
+//     }
 
-    *p++ = '\n';
+//     *p++ = '\n';
 
-    USBD_CDC_SetTxBuffer(
-        &hUsbDeviceFS, reinterpret_cast<uint8_t*>(string_buffer), p - string_buffer);
-    USBD_CDC_TransmitPacket(&hUsbDeviceFS);
-}
+//     USBD_CDC_SetTxBuffer(
+//         &hUsbDeviceFS, reinterpret_cast<uint8_t*>(string_buffer), p - string_buffer);
+//     USBD_CDC_TransmitPacket(&hUsbDeviceFS);
+// }
 
 namespace device {
 namespace spi {

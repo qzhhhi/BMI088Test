@@ -3,7 +3,7 @@
 -- add_rules("plugin.compile_commands.autoupdate", { lsp = "clangd", outputdir = "." })
 set_policy("build.warning", true)
 set_policy("check.auto_ignore_flags", false)
-set_languages("c11", "c++17")
+set_languages("c11", "c++20")
 
 set_config("plat", "cross")           -- 交叉编译
 set_config("cross", "arm-none-eabi-") -- 设置交叉编译平台
@@ -17,7 +17,7 @@ target("application", function()
     if is_mode("debug") then   -- 调试模式，开启Og优化，但不开启lto优化，以保留调试信息
         add_cxflags("-Og")
     elseif is_mode("release") then -- 发布模式
-        set_optimize("fastest")
+        set_optimize("faster")
     end
 
     -- 从CubeMX生成的Makefile中读取hal的源文件和头文件

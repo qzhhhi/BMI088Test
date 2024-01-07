@@ -9,8 +9,9 @@
 
 #include "device/spi/spi.hpp"
 #include "device/timer/us_delay.hpp"
+#include "device/usb/cdc/package.hpp"
+#include "glue/topic/topic.hpp"
 
-extern USBD_HandleTypeDef hUsbDeviceFS;
 extern float acc_x, acc_y, acc_z;
 
 namespace device {
@@ -31,6 +32,12 @@ public:
         _400  = 0x0A,
         _800  = 0x0B,
         _1600 = 0x0C
+    };
+
+    struct PackageDymaticPart {
+        int16_t acc_x;
+        int16_t acc_y;
+        int16_t acc_z;
     };
 
     Accelerometer(Spi::Lazy* spi, Range range = Range::_6G, DataRate data_rate = DataRate::_1600)
@@ -107,19 +114,18 @@ public:
             assert(size == sizeof(AccelerometerData) + 2);
             auto& data = *reinterpret_cast<AccelerometerData*>(rx_buffer + 2);
 
-            acc_x = data.x / 32767.0f * 6.0f;
-            acc_y = data.y / 32767.0f * 6.0f;
-            acc_z = data.z / 32767.0f * 6.0f;
+            HAL_GPIO_TogglePin(LED_B_GPIO_Port, LED_B_Pin);
 
-            // static char string_buffer[64];
-            // sprintf(string_buffer, "%d %d %d\n", data.x, data.y, data.z);
+            // acc_x = data.x / 32767.0f * 6.0f;
+            // acc_y = data.y / 32767.0f * 6.0f;
+            // acc_z = data.z / 32767.0f * 6.0f;
 
-            // USBD_CDC_SetTxBuffer(
-            //     &hUsbDeviceFS, reinterpret_cast<uint8_t*>(string_buffer), strlen(string_buffer));
-            // USBD_CDC_TransmitPacket(&hUsbDeviceFS);
-
-            // using namespace std::chrono_literals;
-            // module::timer::us_delay(1ms);
+            auto msg = topic.make_message();
+            assert(msg);
+            if (msg) {
+                msg->init<PackageDymaticPart>(0x31, 0, data.x, data.y, data.z);
+                topic.publish(std::move(msg));
+            }
         } else {
             init_rx_buffer_ = rx_buffer;
             init_rx_size_   = size;
@@ -127,8 +133,10 @@ public:
     }
 
     void data_ready_callback() {
-        assert(read<SpiTransmitReceiveMode::INTERRUPT>(RegisterAddress::ACC_X_LSB, 6));
+        read<SpiTransmitReceiveMode::INTERRUPT>(RegisterAddress::ACC_X_LSB, 6);
     }
+
+    glue::topic::Topic<usb::Package, 2> topic;
 
 private:
     enum class RegisterAddress : uint8_t {
