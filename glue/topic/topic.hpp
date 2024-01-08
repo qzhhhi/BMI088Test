@@ -60,26 +60,24 @@ public:
 
         // utility::InterruptLock lock;
 
-        __disable_irq();
+        utility::InterruptMutex::lock();
         auto msg                = std::move(message_queue_.peek());
         first_message_released_ = false;
-        __enable_irq();
+        utility::InterruptMutex::unlock();
 
         auto restore = subscriber_->callback(std::move(msg));
 
         if (restore) {
-            __disable_irq();
+            utility::InterruptLockGuard guard;
             if (!first_message_released_) {
                 message_queue_.peek() = std::move(restore);
             }
-            __enable_irq();
             return false;
         } else {
-            __disable_irq();
+            utility::InterruptLockGuard guard;
             if (!first_message_released_) {
                 message_queue_.pop();
             }
-            __enable_irq();
             return true;
         }
     }

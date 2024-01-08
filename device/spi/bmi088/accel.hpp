@@ -114,18 +114,10 @@ public:
             assert(size == sizeof(AccelerometerData) + 2);
             auto& data = *reinterpret_cast<AccelerometerData*>(rx_buffer + 2);
 
-            HAL_GPIO_TogglePin(LED_B_GPIO_Port, LED_B_Pin);
-
-            // acc_x = data.x / 32767.0f * 6.0f;
-            // acc_y = data.y / 32767.0f * 6.0f;
-            // acc_z = data.z / 32767.0f * 6.0f;
-
             auto msg = topic.make_message();
             assert(msg);
-            if (msg) {
-                msg->init<PackageDymaticPart>(0x31, 0, data.x, data.y, data.z);
-                topic.publish(std::move(msg));
-            }
+            msg->init<PackageDymaticPart>(0x31, 0, data.x, data.y, data.z);
+            topic.publish(std::move(msg));
         } else {
             init_rx_buffer_ = rx_buffer;
             init_rx_size_   = size;
@@ -136,7 +128,7 @@ public:
         read<SpiTransmitReceiveMode::INTERRUPT>(RegisterAddress::ACC_X_LSB, 6);
     }
 
-    glue::topic::Topic<usb::Package, 2> topic;
+    glue::topic::Topic<usb::Package, 1> topic;
 
 private:
     enum class RegisterAddress : uint8_t {

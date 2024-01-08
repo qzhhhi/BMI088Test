@@ -11,6 +11,7 @@
  * @copyright Copyright (c) 2023 by Alliance, All Rights Reserved.
  */
 
+#include <atomic>
 #include <cstddef>
 #include <cstdint>
 
@@ -27,7 +28,7 @@ class CircularQueue : Immovable {
 public:
     CircularQueue() noexcept
         : front_(nullptr)
-        , rear_(queue_) {}
+        , rear_(&queue_[0]) {}
 
     ~CircularQueue() noexcept {
         while (!empty()) {
@@ -41,37 +42,41 @@ public:
             // This operation is equivalent to calling the pop() function once.
             // But NEVER do this unless you change the 'else if' expression below to 'if', which
             // will bring some performance loss.
-            reinterpret_cast<T*>(front_)->~T();
-            front_ = next(front_);
+            TypeErasedDataT* front = front_.load(std::memory_order_relaxed);
+            reinterpret_cast<T*>(front)->~T();
+            front_.store(next(front), std::memory_order_relaxed);
         } else if (empty()) {
-            front_ = rear_;
+            front_.store(rear_.load(std::memory_order_relaxed), std::memory_order_relaxed);
         }
 
-        new (rear_) T{std::forward<Args>(args)...};
-        rear_ = next(rear_);
+        new (rear_.load(std::memory_order_relaxed)) T{std::forward<Args>(args)...};
+        rear_.store(next(rear_.load(std::memory_order_relaxed)), std::memory_order_relaxed);
     }
 
     T pop() noexcept {
-        T& element      = *reinterpret_cast<T*>(front_);
-        T moved_element = std::move(element);
+        TypeErasedDataT* front = front_.load(std::memory_order_relaxed);
+        T& element             = *reinterpret_cast<T*>(front);
+        T moved_element        = std::move(element);
         element.~T();
-        front_ = next(front_);
+        front_.store(next(front_.load(std::memory_order_relaxed)), std::memory_order_relaxed);
         if (full())
-            front_ = nullptr;
+            front_.store(nullptr, std::memory_order_relaxed);
         return moved_element;
     }
 
-    T& peek() noexcept { return *reinterpret_cast<T*>(front_); }
+    T& peek() noexcept { return *reinterpret_cast<T*>(front_.load(std::memory_order_relaxed)); }
 
-    bool empty() noexcept { return front_ == nullptr; }
+    bool empty() noexcept { return front_.load(std::memory_order_relaxed) == nullptr; }
 
-    bool full() noexcept { return front_ == rear_; }
+    bool full() noexcept {
+        return front_.load(std::memory_order_relaxed) == rear_.load(std::memory_order_relaxed);
+    }
 
     size_t size() noexcept {
         if (empty())
             return 0;
 
-        auto size = rear_ - front_;
+        auto size = rear_.load(std::memory_order_relaxed) - front_.load(std::memory_order_relaxed);
         if (size <= 0)
             size += max_size;
 
@@ -82,7 +87,7 @@ private:
     struct alignas(T) TypeErasedDataT {
         uint8_t data[sizeof(T)];
     } queue_[max_size];
-    TypeErasedDataT *front_, *rear_;
+    std::atomic<TypeErasedDataT*> front_, rear_;
 
     TypeErasedDataT* next(TypeErasedDataT* pointer) noexcept {
         auto next = pointer + 1;

@@ -17,12 +17,11 @@ float acc_x, acc_y, acc_z;
 void AppEntry() { application->main(); }
 
 Application::Application() {
-    device::timer::us_delay(5s);
     HAL_GPIO_WritePin(LED_B_GPIO_Port, LED_B_Pin, GPIO_PIN_SET);
 }
 
 extern "C" {
-    extern volatile int free_count;
+extern volatile int free_count;
 }
 
 class MySubscriber : public glue::topic::Subscriber<device::usb::Package> {
@@ -40,12 +39,6 @@ void Application::main() {
 
     while (true) {
         acc.topic.execute();
-        free_count = utility::memory::TypedPool<device::usb::Package>::free_count();
+        // free_count = acc.topic.message_queue_.size();
     }
-
-    // device::spi::bmi088::accelerometer.get();
-    // while (true) {
-    //     device::timer::us_delay(500ms);
-    //     HAL_GPIO_TogglePin(LED_G_GPIO_Port, LED_G_Pin);
-    // }
 }

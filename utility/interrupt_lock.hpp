@@ -4,30 +4,31 @@
 
 #include <main.h>
 
+#include "utility/immovable.hpp"
+
 namespace utility {
 
-class InterruptLock {
+class InterruptMutex : Immovable {
 public:
-    InterruptLock(const InterruptLock&)            = delete;
-    InterruptLock& operator=(const InterruptLock&) = delete;
-    InterruptLock(InterruptLock&&)                 = delete;
-    InterruptLock& operator=(InterruptLock&&)      = delete;
-
-    InterruptLock() {
+    static void lock() {
         __disable_irq();
         ++lock_count_;
     }
 
-    ~InterruptLock() {
+    static void unlock() {
         if (--lock_count_ == 0) {
             __enable_irq();
-        } else {
-            assert(lock_count_ > 0);
         }
     }
 
 private:
     static inline int lock_count_;
+};
+
+class InterruptLockGuard : Immovable {
+public:
+    InterruptLockGuard() { InterruptMutex::lock(); }
+    ~InterruptLockGuard() { InterruptMutex::unlock(); }
 };
 
 } // namespace utility
