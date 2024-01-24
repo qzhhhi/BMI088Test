@@ -67,7 +67,6 @@ public:
         dealloc(static_cast<void*>(pointer));
     }
 
-private:
     struct Stack {
         block_id_t top;
         uint16_t stamp;
@@ -84,6 +83,7 @@ private:
         return static_cast<block_id_t>(&block - stack_body_);
     }
 
+private:
     static_assert(std::atomic<Stack>::is_always_lock_free);
     std::atomic<Stack> stack_;
     Block stack_body_[max_block_count];

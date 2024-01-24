@@ -1,12 +1,14 @@
 #pragma once
 
-#include <memory>
+#include <cstdint>
+
+#include <atomic>
+
 #include <usbd_cdc.h>
 
 #include "device/usb/cdc/package.hpp"
 #include "utility/immovable.hpp"
 #include "utility/lazy.hpp"
-#include "utility/memory/typed_pool.hpp"
 
 namespace device {
 namespace usb {
@@ -19,66 +21,95 @@ class Cdc : private utility::Immovable {
 public:
     using Lazy = utility::Lazy<Cdc>;
 
-    Cdc() = default;
+    Cdc(){
 
-    bool transmit(utility::memory::TypedPool<Package>::UniquePtr& package) {
-        if (__sync_bool_compare_and_swap(&task_created_, false, true)) {
-            if (hal_ready()) {
-                package_ = std::move(package);
+    };
 
-                USBD_CDC_SetTxBuffer(&hUsbDeviceFS, package_->buffer, package_->size());
-                USBD_CDC_TransmitPacket(&hUsbDeviceFS);
-                task_created_ = false;
+    // bool transmit(utility::memory::TypedPool<Package>::UniquePtr& package) {
+    //     if (__sync_bool_compare_and_swap(&task_created_, false, true)) {
+    //         if (hal_ready()) {
+    //             package_ = std::move(package);
 
-                return true;
-            } else {
-                task_created_ = false;
-            }
-        }
-        return false;
-    }
+    //             USBD_CDC_SetTxBuffer(&hUsbDeviceFS, package_->buffer, package_->size());
+    //             USBD_CDC_TransmitPacket(&hUsbDeviceFS);
+    //             task_created_ = false;
+
+    //             return true;
+    //         } else {
+    //             task_created_ = false;
+    //         }
+    //     }
+    //     return false;
+    // }
 
     // class TransmitTask : private utility::Uncopyable {
     // public:
     //     friend class Cdc;
 
     //     TransmitTask(TransmitTask&& task) noexcept
-    //         : handle_(task.handle_) {
-    //         task.handle_ = nullptr;
+    //         : parent_(task.parent_) {
+    //         task.parent_ = nullptr;
     //     }
     //     TransmitTask& operator=(TransmitTask&& task) = delete;
 
-    //     operator bool() const noexcept { return handle_ != nullptr; }
+    //     operator bool() const noexcept { return parent_; }
+
+    //     void set_package(Package& package) { package_ = &package; }
 
     //     ~TransmitTask() noexcept {
-    //         if (*this) {
+    //         if (*this && package_) {
     //             USBD_CDC_SetTxBuffer(
-    //                 &hUsbDeviceFS, handle_->package_->buffer, handle_->package_->size());
+    //                 &hUsbDeviceFS, parent_->package_->buffer, parent_->package_->size());
     //             USBD_CDC_TransmitPacket(&hUsbDeviceFS);
 
-    //             handle_->task_created_ = false;
+    //             parent_->task_created_ = false;
     //         }
     //     }
 
     // private:
     //     TransmitTask() noexcept
-    //         : handle_(nullptr) {}
+    //         : parent_(nullptr) {}
 
-    //     TransmitTask(Cdc* handle) noexcept
-    //         : handle_(handle) {}
+    //     TransmitTask(Cdc* parent) noexcept
+    //         : parent_(parent) {}
 
-    //     Cdc* handle_;
+    //     Cdc* parent_;
+    //     Package* package_ = nullptr;
     // };
 
-private:
-    bool hal_ready() const {
-        USBD_CDC_HandleTypeDef* cdc_handle = static_cast<USBD_CDC_HandleTypeDef*>(
-            hUsbDeviceFS.pClassDataCmsit[hUsbDeviceFS.classId]);
+    // TransmitTask create_transmit_task() {
+    //     bool expected = false;
+    //     if (task_created_.compare_exchange_strong(expected, true, std::memory_order_acquire)) {
+    //         if (hal_ready()) {
+    //             return TransmitTask{this};
+    //         } else {
+    //             task_created_ = false;
+    //         }
+    //     }
+    //     return TransmitTask{};
+    // }
+    bool ready() const {
+        // The value of cdc_handle remains null until a USB connection occurs, and an interrupt
+        // modifies it to a non-zero value. Therefore, atomic loading must be used here to prevent
+        // compiler optimization.
+        const auto& cdc_handle_atomic = *reinterpret_cast<std::atomic<USBD_CDC_HandleTypeDef*>*>(
+            &hUsbDeviceFS.pClassDataCmsit[hUsbDeviceFS.classId]);
+        auto cdc_handle = cdc_handle_atomic.load(std::memory_order_relaxed);
+        if (!cdc_handle)
+            return false;
+
         return cdc_handle->TxState == 0U;
     }
 
-    bool task_created_;
-    utility::memory::TypedPool<Package>::UniquePtr package_;
+    template <typename T>
+    void transmit(Package<T>& package) {
+        USBD_CDC_SetTxBuffer(&hUsbDeviceFS, const_cast<uint8_t*>(package.c_str()), sizeof(package));
+        USBD_CDC_TransmitPacket(&hUsbDeviceFS);
+    }
+
+private:
+    // std::atomic<bool> task_created_;
+    // utility::memory::TypedPool<Package>::UniquePtr package_;
 };
 
 inline Cdc::Lazy cdc;

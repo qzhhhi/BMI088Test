@@ -18,6 +18,7 @@ target("application", function()
         add_cxflags("-Og")
     elseif is_mode("release") then -- 发布模式
         set_optimize("fastest")
+        -- add_cxflags("-Og")
     end
 
     -- 从CubeMX生成的Makefile中读取hal的源文件和头文件

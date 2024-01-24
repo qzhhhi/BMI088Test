@@ -74,6 +74,7 @@ void AppEntry(void);
 #define INT1_ACC_EXTI_IRQn EXTI4_IRQn
 #define INT1_GYRO_Pin GPIO_PIN_5
 #define INT1_GYRO_GPIO_Port GPIOC
+#define INT1_GYRO_EXTI_IRQn EXTI9_5_IRQn
 #define SPI1_MOSI_Pin GPIO_PIN_7
 #define SPI1_MOSI_GPIO_Port GPIOA
 #define CS1_GYRO_Pin GPIO_PIN_0

@@ -9,8 +9,7 @@
 
 #include "device/spi/spi.hpp"
 #include "device/timer/us_delay.hpp"
-#include "device/usb/cdc/package.hpp"
-#include "glue/topic/topic.hpp"
+#include "glue/double_buffer.hpp"
 
 extern float acc_x, acc_y, acc_z;
 
@@ -34,10 +33,10 @@ public:
         _1600 = 0x0C
     };
 
-    struct PackageDymaticPart {
-        int16_t acc_x;
-        int16_t acc_y;
-        int16_t acc_z;
+    struct Data {
+        int16_t x;
+        int16_t y;
+        int16_t z;
     };
 
     Accelerometer(Spi::Lazy* spi, Range range = Range::_6G, DataRate data_rate = DataRate::_1600)
@@ -111,13 +110,19 @@ public:
 
     void transmit_receive_callback(uint8_t* rx_buffer, size_t size) override {
         if (initialized_) {
-            assert(size == sizeof(AccelerometerData) + 2);
-            auto& data = *reinterpret_cast<AccelerometerData*>(rx_buffer + 2);
+            assert(size == sizeof(Data) + 2);
+            auto& data = *reinterpret_cast<Data*>(rx_buffer + 2);
 
-            auto msg = topic.make_message();
-            assert(msg);
-            msg->init<PackageDymaticPart>(0x31, 0, data.x, data.y, data.z);
-            topic.publish(std::move(msg));
+            auto& writing = buffer.start_writing();
+            writing.x = data.x;
+            writing.y = data.y;
+            writing.z = data.z;
+            buffer.finish_writing();
+
+
+            // if (auto msg = topic.publish()) {
+            //     msg->init<PackageDymaticPart>(0x31, 0, data.x, data.y, data.z);
+            // }
         } else {
             init_rx_buffer_ = rx_buffer;
             init_rx_size_   = size;
@@ -125,10 +130,11 @@ public:
     }
 
     void data_ready_callback() {
-        read<SpiTransmitReceiveMode::INTERRUPT>(RegisterAddress::ACC_X_LSB, 6);
+        read<SpiTransmitReceiveMode::BLOCK>(RegisterAddress::ACC_X_LSB, 6);
     }
 
-    glue::topic::Topic<usb::Package, 1> topic;
+    // glue::topic::Topic<usb::Package> topic;
+    glue::DoubleBuffer<Data> buffer;
 
 private:
     enum class RegisterAddress : uint8_t {
@@ -156,12 +162,6 @@ private:
         ACC_STATUS     = 0x03,
         ACC_ERR_REG    = 0x02,
         ACC_CHIP_ID    = 0x00
-    };
-
-    struct AccelerometerData {
-        int16_t x;
-        int16_t y;
-        int16_t z;
     };
 
     template <SpiTransmitReceiveMode mode>
