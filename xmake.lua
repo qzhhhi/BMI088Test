@@ -14,7 +14,7 @@ target("application", function()
     add_rules("c++", "asm")
     set_extension(".elf")
 
-    if is_mode("debug") then   -- 调试模式，开启Og优化，但不开启lto优化，以保留调试信息
+    if is_mode("debug") then       -- 调试模式，开启Og优化，但不开启lto优化，以保留调试信息
         add_cxflags("-Og")
     elseif is_mode("release") then -- 发布模式
         set_optimize("fastest")
@@ -40,8 +40,8 @@ target("application", function()
     -- 启用all和extra级别的警告，启用变量遮蔽(shadow)的警告，并将所有警告视为错误
     add_cxflags("-Wall", "-Wextra", "-Wshadow", "-Werror")
     -- (白名单)未使用的变量视为警告，未使用的函数参数不警告
-    add_cxflags("-Wno-error=unused")
-    add_cxflags("-Wno-error=unused-variable", "-Wno-error=unused-but-set-variable", "-Wno-unused-parameter")
+    add_cxflags("-Wno-error=unused", "-Wno-error=unused-variable")
+    add_cxflags("-Wno-error=unused-but-set-variable", "-Wno-error=unused-function", "-Wno-unused-parameter")
     add_cxxflags("-Wno-error=unused-local-typedefs")
     -- 对于gcc编译器，需要加一句-pedantic-errors禁用所有GNU扩展
     add_cxflags("-pedantic-errors")

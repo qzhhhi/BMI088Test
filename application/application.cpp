@@ -8,9 +8,11 @@
 #include "device/can/can.hpp"
 #include "device/spi/bmi088/accel.hpp"
 #include "device/spi/bmi088/gyro.hpp"
+#include "device/uart/uart.hpp"
 #include "device/usb/cdc/cdc.hpp"
 #include "device/usb/cdc/package.hpp"
 #include "glue/double_buffer.hpp"
+#include "utility/interrupt_lock.hpp"
 
 using namespace std::chrono_literals;
 
@@ -25,31 +27,37 @@ extern volatile int free_count;
 }
 
 void Application::main() {
-    auto& cdc = *device::usb::cdc;
+    using device::usb::Cdc;
 
     auto& can1 = *device::can::can1;
-    can1.receive_buffer.construct_each((uint8_t)0x11);
+    can1.cdc_transmit_buffer.construct_each((uint8_t)0x11);
 
     auto& acc  = *device::spi::bmi088::accelerometer;
     auto& gyro = *device::spi::bmi088::gyroscope;
     gyro.buffer.construct_each((uint8_t)0x31);
 
+    auto& uart3 = *device::uart::uart3;
+    uart3.cdc_transmit_buffer.construct_each((uint8_t)0x23);
+
     while (true) {
-        if (cdc.ready()) {
-            if (can1.receive_buffer.readable()) {
-                auto& package = can1.receive_buffer.read();
-                cdc.transmit(package);
-                continue;
-            }
-            if (gyro.buffer.readable()) {
-                auto& acc_data       = acc.buffer.read();
-                auto& package        = gyro.buffer.read();
-                package.data().acc_x = acc_data.x;
-                package.data().acc_y = acc_data.y;
-                package.data().acc_z = acc_data.z;
-                cdc.transmit(package);
-                continue;
-            }
+        if (can1.cdc_transmit_buffer.readable() && Cdc::ready()) {
+            auto& package = can1.cdc_transmit_buffer.read();
+            Cdc::transmit(package);
+            continue;
+        }
+        if (gyro.buffer.readable() && Cdc::ready()) {
+            auto& acc_data       = acc.buffer.read();
+            auto& package        = gyro.buffer.read();
+            package.data().acc_x = acc_data.x;
+            package.data().acc_y = acc_data.y;
+            package.data().acc_z = acc_data.z;
+            Cdc::transmit(package);
+            continue;
+        }
+        if (uart3.cdc_transmit_buffer.readable() && Cdc::ready()) {
+            auto& package = uart3.cdc_transmit_buffer.read();
+            Cdc::transmit(package);
+            continue;
         }
     }
 }

@@ -2,17 +2,28 @@
 
 #include "device/usb/cdc/package.hpp"
 #include "glue/double_buffer.hpp"
+#include "stm32f4xx_hal.h"
 #include "utility/lazy.hpp"
 #include <can.h>
 
 #include <cassert>
+#include <cstdint>
 #include <utility/immovable.hpp>
 
 namespace device {
 namespace can {
 
+extern "C" {
+extern volatile int free_count;
+}
+
 class Can : private utility::Immovable {
 public:
+    struct __attribute__((packed)) Data {
+        uint32_t id;
+        uint8_t data[8];
+    };
+
     Can(CAN_HandleTypeDef* hal_can_handle, uint32_t hal_filter_bank)
         : hal_can_handle_(hal_can_handle) {
         config_can(hal_filter_bank);
@@ -20,40 +31,49 @@ public:
         hal_can_tx_header_.RTR = CAN_RTR_DATA;
         hal_can_tx_header_.IDE = CAN_ID_STD;
         hal_can_tx_header_.DLC = 8;
+
+        cdc_transmit_buffer.construct_each();
     }
 
     void receive_callback() {
-        auto& buf = receive_buffer.start_writing();
+        auto& buf = cdc_transmit_buffer.start_writing();
         HAL_CAN_GetRxMessage(&hcan1, CAN_RX_FIFO0, &hal_can_rx_header_, buf.data().data);
         if (hal_can_rx_header_.RTR == CAN_RTR_DATA && hal_can_rx_header_.DLC == 8) {
             if (hal_can_rx_header_.IDE == CAN_ID_STD)
                 buf.data().id = hal_can_rx_header_.StdId;
             else
                 buf.data().id = hal_can_rx_header_.ExtId;
-            receive_buffer.finish_writing();
+            cdc_transmit_buffer.finish_writing();
         }
     }
 
-    bool try_transmit() {
-        if (!transmit_buffer.readable())
-            return false;
+    bool try_transmit(const Data& data) {
         if (HAL_CAN_GetTxMailboxesFreeLevel(hal_can_handle_) == 0)
             return false;
 
-        auto& data               = transmit_buffer.read();
+        // static uint32_t last_tick;
+        // static int count;
+        // uint32_t now_tick = HAL_GetTick();
+        // if (now_tick - last_tick > 1000) {
+        //     last_tick = now_tick;
+        //     free_count = count;
+        //     count = 0;
+        // }
+
+        // if (data.id == 0x200) {
+        //     count++;
+        //     HAL_GPIO_TogglePin(LED_B_GPIO_Port, LED_B_Pin);
+        // }
+
         hal_can_tx_header_.StdId = data.id;
         uint32_t tx_mailbox;
-        HAL_CAN_AddTxMessage(hal_can_handle_, &hal_can_tx_header_, data.data, &tx_mailbox);
+        HAL_CAN_AddTxMessage(
+            hal_can_handle_, &hal_can_tx_header_, const_cast<uint8_t*>(data.data), &tx_mailbox);
         return true;
     }
 
-    struct __attribute__((packed)) Data {
-        uint32_t id;
-        uint8_t data[8];
-    };
-
-    glue::DoubleBuffer<usb::Package<Data>> receive_buffer;
-    glue::DoubleBuffer<Data> transmit_buffer;
+    glue::DoubleBuffer<usb::TransmitPackage<Data>> cdc_transmit_buffer;
+    // glue::DoubleBuffer<Data> can_transmit_buffer;
 
 private:
     void config_can(uint32_t hal_filter_bank) {

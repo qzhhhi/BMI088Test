@@ -1,8 +1,11 @@
 #pragma once
 
+#include <algorithm>
+#include <cassert>
 #include <cstddef>
 #include <cstdint>
 
+#include <cstring>
 #include <new>
 #include <numeric>
 
@@ -10,46 +13,33 @@ namespace device {
 namespace usb {
 
 constexpr size_t kPackageMaxSize = 64;
+constexpr uint8_t kPackageHead   = 0xAF;
 
-// using package_head_t  = uint8_t;
-// using package_type_t  = uint8_t;
-// using package_index_t = uint8_t;
-// using package_size_t  = uint8_t;
-
-// using package_verify_code_t = uint8_t;
-// inline package_verify_code_t calculate_verify_code(const uint8_t* data, size_t size) {
-//     return std::accumulate(data, data + size, static_cast<package_verify_code_t>(0));
-// }
-
-constexpr uint8_t kPackageHead = 0xAF;
-
-struct __attribute__((packed)) PackageStaticPart final {
-    uint8_t head;
-    uint8_t type;
-    uint8_t index;
-    uint8_t data_size;
-};
+struct Dynamic {};
 
 template <typename T>
-class __attribute__((packed)) Package final {
+class __attribute__((packed)) TransmitPackage final {
 public:
-    Package(uint8_t type, uint8_t index = 0) {
+    TransmitPackage(uint8_t type = 0, uint8_t index = 0) noexcept {
+        static_assert(sizeof(TransmitPackage) <= kPackageMaxSize);
         head_      = kPackageHead;
         type_      = type;
         index_     = index;
         data_size_ = sizeof(T);
     }
 
-    uint8_t& type() { return type_; }
-    uint8_t& index() { return index_; }
-    T& data() { return data_; }
+    uint8_t& type() noexcept { return type_; }
+    uint8_t& index() noexcept { return index_; }
+    T& data() noexcept { return data_; }
 
     const uint8_t* c_str() noexcept {
         uint8_t* str_this = reinterpret_cast<uint8_t*>(this);
-        verify_ = std::accumulate(
+        verify_           = std::accumulate(
             str_this, str_this + sizeof(*this) - sizeof(verify_), static_cast<uint8_t>(0));
         return str_this;
     }
+
+    constexpr size_t size() { return sizeof(TransmitPackage); }
 
 private:
     uint8_t head_;
@@ -60,56 +50,100 @@ private:
     uint8_t verify_;
 };
 
-// struct alignas(4) Package final {
-//     template <typename T, typename... Args>
-//     void init(package_type_t type, package_index_t index, Args... args) {
-//         static_part().head      = kPackageHead;
-//         static_part().type      = type;
-//         static_part().index     = index;
-//         static_part().data_size = sizeof(T);
-//         new (dymatic_part()) T{std::forward<Args>(args)...};
-//     }
+template <>
+class __attribute__((packed)) TransmitPackage<Dynamic> final {
+public:
+    TransmitPackage(uint8_t type = 0, uint8_t index = 0) noexcept {
+        static_assert(sizeof(TransmitPackage) <= kPackageMaxSize);
+        head_      = kPackageHead;
+        type_      = type;
+        index_     = index;
+        data_size_ = 0;
+    }
 
-//     static constexpr size_t static_part_size() noexcept { return sizeof(PackageStaticPart); }
+    uint8_t& type() noexcept { return type_; }
+    uint8_t& index() noexcept { return index_; }
 
-//     PackageStaticPart& static_part() noexcept {
-//         return *reinterpret_cast<PackageStaticPart*>(buffer);
-//     }
+    static constexpr size_t max_data_size() { return sizeof(data_and_verify_) - 1u; };
 
-//     size_t dymatic_part_size() noexcept { return static_part().data_size; }
+    template <typename T>
+    T& data() noexcept {
+        data_size_ = sizeof(T);
+        return *reinterpret_cast<T*>(&data_and_verify_[0]);
+    }
 
-//     uint8_t* dymatic_part() noexcept { return buffer + static_part_size(); }
+    void reset() { data_size_ = 0; }
 
-//     template <typename T>
-//     T& dymatic_part() noexcept {
-//         return *reinterpret_cast<T*>(dymatic_part());
-//     }
+    size_t append(const uint8_t* buffer, size_t size) {
+        auto append_size = std::min(size, max_data_size() - data_size_);
+        memcpy(data_and_verify_ + data_size_, buffer, append_size);
+        data_size_ += append_size;
+        return append_size;
+    }
 
-//     using package_dymatic_buffer_t = uint8_t (&)[kPackageMaxSize - sizeof(PackageStaticPart)];
-//     package_dymatic_buffer_t dymatic_buffer() {
-//         return reinterpret_cast<package_dymatic_buffer_t>(*(buffer + static_part_size()));
-//     }
+    const uint8_t* c_str() noexcept {
+        uint8_t* str_this          = reinterpret_cast<uint8_t*>(this);
+        size_t size_without_verify = 4u + data_size_;
+        data_and_verify_[data_size_] =
+            std::accumulate(str_this, str_this + size_without_verify, static_cast<uint8_t>(0));
+        return str_this;
+    }
 
-//     static constexpr size_t verify_part_size() noexcept { return sizeof(package_verify_code_t); }
+    size_t size() const noexcept {
+        return 4u + data_size_ + 1u;
+    }
 
-//     package_verify_code_t& verify_part() noexcept {
-//         size_t length_without_verify = static_part_size() + dymatic_part_size();
-//         return *reinterpret_cast<package_verify_code_t*>(buffer + length_without_verify);
-//     }
+private:
+    uint8_t head_;
+    uint8_t type_;
+    uint8_t index_;
+    uint8_t data_size_;
+    uint8_t data_and_verify_[kPackageMaxSize - 4];
+};
 
-//     void update_verify_part() noexcept {
-//         auto data = reinterpret_cast<package_verify_code_t*>(this);
-//         auto code = std::accumulate(
-//             data, data + static_part_size() + dymatic_part_size(),
-//             static_cast<package_verify_code_t>(0));
-//         verify_part() = code;
-//     }
+class __attribute__((packed)) ReceivePackage final {
+public:
+    ReceivePackage() noexcept = default;
 
-//     size_t size() noexcept { return static_part_size() + dymatic_part_size() +
-//     verify_part_size(); }
+    bool verify() noexcept {
+        if (head_ != kPackageHead)
+            return false;
 
-//     uint8_t buffer[kPackageMaxSize];
-// };
+        if ((data_size_ + 1u) > sizeof(data_and_verify_))
+            return false;
+
+        uint8_t* str_this = reinterpret_cast<uint8_t*>(this);
+        auto verify_ =
+            std::accumulate(str_this, str_this + 4u + data_size_, static_cast<uint8_t>(0));
+        if (data_and_verify_[data_size_] != verify_)
+            return false;
+
+        return true;
+    }
+
+    uint8_t type() noexcept { return type_; }
+    uint8_t index() noexcept { return index_; }
+    uint8_t data_size() noexcept { return data_size_; }
+    uint8_t size() noexcept { return 4u + data_size_ + 1u; }
+
+    template <typename T>
+    const T& data() noexcept {
+        assert(sizeof(T) == data_size_);
+        return *reinterpret_cast<T*>(data_and_verify_);
+    }
+
+    uint8_t* c_str() noexcept {
+        uint8_t* str_this = reinterpret_cast<uint8_t*>(this);
+        return str_this;
+    }
+
+private:
+    uint8_t head_;
+    uint8_t type_;
+    uint8_t index_;
+    uint8_t data_size_;
+    uint8_t data_and_verify_[kPackageMaxSize - 4];
+};
 
 } // namespace usb
 } // namespace device

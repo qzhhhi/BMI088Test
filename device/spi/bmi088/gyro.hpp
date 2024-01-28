@@ -113,6 +113,8 @@ public:
         // Switch the main power mode into normal mode.
         assert(write_with_confirm(RegisterAddress::GYRO_LPM1, 0x00));
 
+        buffer.construct_each();
+
         initialized_ = true;
     }
 
@@ -139,7 +141,7 @@ public:
         read<SpiTransmitReceiveMode::BLOCK>(RegisterAddress::RATE_X_LSB, 6);
     }
 
-    glue::DoubleBuffer<usb::Package<ImuData>> buffer;
+    glue::DoubleBuffer<usb::TransmitPackage<ImuData>> buffer;
 
 private:
     enum class RegisterAddress : uint8_t {

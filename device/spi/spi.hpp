@@ -111,7 +111,6 @@ public:
 
         if (__sync_bool_compare_and_swap(&task_created_, false, true)) {
             if (hal_ready()) {
-                HAL_GPIO_TogglePin(LED_G_GPIO_Port, LED_G_Pin);
                 // The function transmit_receive_callback has a very low probability of not being
                 // called. Therefore, before creating a new task, release the chip select pin again
                 // to ensure correct data transmission.
