@@ -72,9 +72,9 @@ private:
             static int count;
             uint32_t now_tick = HAL_GetTick();
             if (now_tick - last_tick > 1000) {
-                last_tick = now_tick;
+                last_tick  = now_tick;
                 free_count = count;
-                count = 0;
+                count      = 0;
             }
 
             count++;
@@ -88,6 +88,10 @@ private:
 
             if (receive_package_.type() == 0x11) {
                 device::can::can1.weak_execute([](device::can::Can* self) {
+                    assert(self->try_transmit(receive_package_.data<device::can::Can::Data>()));
+                });
+            } else if (receive_package_.type() == 0x12) {
+                device::can::can2.weak_execute([](device::can::Can* self) {
                     assert(self->try_transmit(receive_package_.data<device::can::Can::Data>()));
                 });
             }

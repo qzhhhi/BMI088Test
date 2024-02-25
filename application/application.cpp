@@ -1,9 +1,6 @@
 #include "application/application.hpp"
 
-#include <cassert>
-#include <cstddef>
 #include <main.h>
-#include <utility>
 
 #include "device/can/can.hpp"
 #include "device/spi/bmi088/accel.hpp"
@@ -12,7 +9,6 @@
 #include "device/usb/cdc/cdc.hpp"
 #include "device/usb/cdc/package.hpp"
 #include "glue/double_buffer.hpp"
-#include "utility/interrupt_lock.hpp"
 
 using namespace std::chrono_literals;
 
@@ -32,6 +28,9 @@ void Application::main() {
     auto& can1 = *device::can::can1;
     can1.cdc_transmit_buffer.construct_each((uint8_t)0x11);
 
+    auto& can2 = *device::can::can2;
+    can2.cdc_transmit_buffer.construct_each((uint8_t)0x12);
+
     auto& acc  = *device::spi::bmi088::accelerometer;
     auto& gyro = *device::spi::bmi088::gyroscope;
     gyro.buffer.construct_each((uint8_t)0x31);
@@ -42,6 +41,11 @@ void Application::main() {
     while (true) {
         if (can1.cdc_transmit_buffer.readable() && Cdc::ready()) {
             auto& package = can1.cdc_transmit_buffer.read();
+            Cdc::transmit(package);
+            continue;
+        }
+        if (can2.cdc_transmit_buffer.readable() && Cdc::ready()) {
+            auto& package = can2.cdc_transmit_buffer.read();
             Cdc::transmit(package);
             continue;
         }

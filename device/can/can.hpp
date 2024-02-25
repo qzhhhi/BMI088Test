@@ -1,14 +1,14 @@
 #pragma once
 
-#include "device/usb/cdc/package.hpp"
-#include "glue/double_buffer.hpp"
-#include "stm32f4xx_hal.h"
-#include "utility/lazy.hpp"
-#include <can.h>
-
 #include <cassert>
 #include <cstdint>
-#include <utility/immovable.hpp>
+
+#include <can.h>
+
+#include "device/usb/cdc/package.hpp"
+#include "glue/double_buffer.hpp"
+#include "utility/immovable.hpp"
+#include "utility/lazy.hpp"
 
 namespace device {
 namespace can {
@@ -24,9 +24,10 @@ public:
         uint8_t data[8];
     };
 
-    Can(CAN_HandleTypeDef* hal_can_handle, uint32_t hal_filter_bank)
+    Can(CAN_HandleTypeDef* hal_can_handle, uint32_t hal_filter_bank,
+        uint32_t hal_slave_start_filter_bank)
         : hal_can_handle_(hal_can_handle) {
-        config_can(hal_filter_bank);
+        config_can(hal_filter_bank, hal_slave_start_filter_bank);
 
         hal_can_tx_header_.RTR = CAN_RTR_DATA;
         hal_can_tx_header_.IDE = CAN_ID_STD;
@@ -37,7 +38,7 @@ public:
 
     void receive_callback() {
         auto& buf = cdc_transmit_buffer.start_writing();
-        HAL_CAN_GetRxMessage(&hcan1, CAN_RX_FIFO0, &hal_can_rx_header_, buf.data().data);
+        HAL_CAN_GetRxMessage(hal_can_handle_, CAN_RX_FIFO0, &hal_can_rx_header_, buf.data().data);
         if (hal_can_rx_header_.RTR == CAN_RTR_DATA && hal_can_rx_header_.DLC == 8) {
             if (hal_can_rx_header_.IDE == CAN_ID_STD)
                 buf.data().id = hal_can_rx_header_.StdId;
@@ -76,7 +77,7 @@ public:
     // glue::DoubleBuffer<Data> can_transmit_buffer;
 
 private:
-    void config_can(uint32_t hal_filter_bank) {
+    void config_can(uint32_t hal_filter_bank, uint32_t hal_slave_start_filter_bank) {
         CAN_FilterTypeDef sFilterConfig;
 
         sFilterConfig.FilterBank           = hal_filter_bank;
@@ -87,7 +88,8 @@ private:
         sFilterConfig.FilterMaskIdHigh     = 0x0000;
         sFilterConfig.FilterMaskIdLow      = 0x0000;
         sFilterConfig.FilterFIFOAssignment = CAN_FILTER_FIFO0;
-        sFilterConfig.FilterActivation     = ENABLE;
+        sFilterConfig.FilterActivation     = CAN_FILTER_ENABLE;
+        sFilterConfig.SlaveStartFilterBank = hal_slave_start_filter_bank;
 
         constexpr auto ok = HAL_OK;
         assert(HAL_CAN_ConfigFilter(hal_can_handle_, &sFilterConfig) == ok);
@@ -100,8 +102,8 @@ private:
     CAN_RxHeaderTypeDef hal_can_rx_header_;
 };
 
-inline utility::Lazy<Can, CAN_HandleTypeDef*, uint32_t> can1{&hcan1, 0};
-inline utility::Lazy<Can, CAN_HandleTypeDef*, uint32_t> can2{&hcan2, 14};
+inline utility::Lazy<Can, CAN_HandleTypeDef*, uint32_t, uint32_t> can1{&hcan1, 0, 14};
+inline utility::Lazy<Can, CAN_HandleTypeDef*, uint32_t, uint32_t> can2{&hcan2, 14, 14};
 
 } // namespace can
 } // namespace device
