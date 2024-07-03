@@ -5,7 +5,6 @@
 #include <optional>
 
 #include <spi.h>
-#include <usbd_cdc.h>
 
 #include "utility/immovable.hpp"
 #include "utility/lazy.hpp"

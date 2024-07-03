@@ -5,7 +5,6 @@
 
 #include <cstdio>
 #include <spi.h>
-#include <usbd_cdc.h>
 
 #include "device/spi/spi.hpp"
 #include "device/timer/us_delay.hpp"

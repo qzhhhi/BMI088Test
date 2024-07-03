@@ -23,7 +23,7 @@ extern volatile int free_count;
 }
 
 void Application::main() {
-    using device::usb::Cdc;
+    // using device::usb::Cdc;
 
     auto& can1 = *device::can::can1;
     can1.cdc_transmit_buffer.construct_each((uint8_t)0x11);
@@ -39,30 +39,30 @@ void Application::main() {
     uart3.cdc_transmit_buffer.construct_each((uint8_t)0x23);
 
     while (true) {
-        if (can1.cdc_transmit_buffer.readable() && Cdc::ready()) {
-            auto& package = can1.cdc_transmit_buffer.read();
-            Cdc::transmit(package);
-            continue;
-        }
-        if (can2.cdc_transmit_buffer.readable() && Cdc::ready()) {
-            auto& package = can2.cdc_transmit_buffer.read();
-            Cdc::transmit(package);
-            continue;
-        }
-        if (gyro.buffer.readable() && Cdc::ready()) {
-            auto& acc_data       = acc.buffer.read();
-            auto& package        = gyro.buffer.read();
-            package.data().acc_x = acc_data.x;
-            package.data().acc_y = acc_data.y;
-            package.data().acc_z = acc_data.z;
-            Cdc::transmit(package);
-            continue;
-        }
-        if (uart3.cdc_transmit_buffer.readable() && Cdc::ready()) {
-            auto& package = uart3.cdc_transmit_buffer.read();
-            Cdc::transmit(package);
-            continue;
-        }
+        // if (can1.cdc_transmit_buffer.readable() && Cdc::ready()) {
+        //     auto& package = can1.cdc_transmit_buffer.read();
+        //     Cdc::transmit(package);
+        //     continue;
+        // }
+        // if (can2.cdc_transmit_buffer.readable() && Cdc::ready()) {
+        //     auto& package = can2.cdc_transmit_buffer.read();
+        //     Cdc::transmit(package);
+        //     continue;
+        // }
+        // if (gyro.buffer.readable() && Cdc::ready()) {
+        //     auto& acc_data       = acc.buffer.read();
+        //     auto& package        = gyro.buffer.read();
+        //     package.data().acc_x = acc_data.x;
+        //     package.data().acc_y = acc_data.y;
+        //     package.data().acc_z = acc_data.z;
+        //     Cdc::transmit(package);
+        //     continue;
+        // }
+        // if (uart3.cdc_transmit_buffer.readable() && Cdc::ready()) {
+        //     auto& package = uart3.cdc_transmit_buffer.read();
+        //     Cdc::transmit(package);
+        //     continue;
+        // }
     }
 }
 
