@@ -29,10 +29,8 @@ AlignConsecutiveDeclarations:
     Enabled: false
 AlignConsecutiveMacros:
     Enabled: true
-    AcrossEmptyLines: false
-    AcrossComments: false
-# AlignConsecutiveShortCaseStatements:
-#     Enabled: false
+    AcrossEmptyLines: true
+    AcrossComments: true
 AlignEscapedNewlines: Left
 AlignOperands: AlignAfterOperator
 AlignTrailingComments:
@@ -45,8 +43,8 @@ AllowAllParametersOfDeclarationOnNextLine: true
 AllowShortBlocksOnASingleLine: Empty
 AllowShortCaseLabelsOnASingleLine: true
 
-IndentPPDirectives: AfterHash
-PPIndentWidth: 1
+IndentPPDirectives: None
+PPIndentWidth: 0
 
 BreakBeforeBinaryOperators: NonAssignment
 BreakBeforeConceptDeclarations: Always
