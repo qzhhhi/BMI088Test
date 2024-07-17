@@ -25,6 +25,8 @@
 #include "usb_device.h"
 #include "gpio.h"
 
+#include "usbd_audio_if.h"
+
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 
@@ -71,6 +73,9 @@ int main(void)
 
   /* USER CODE BEGIN 1 */
 
+  unsigned char recv_buffer[0x1e0];
+  unsigned char send_buffer[0x1e0] = "Alliance Forwarding Device";
+  uint32_t len = 88;
   /* USER CODE END 1 */
 
   /* MCU Configuration--------------------------------------------------------*/
@@ -100,15 +105,23 @@ int main(void)
   MX_USART3_UART_Init();
   MX_USART6_UART_Init();
   /* USER CODE BEGIN 2 */
-  free_count = 666;
-  AppEntry();
-  Error_Handler();
+  free_count = 123;
+  // int k = 0;
+  // AppEntry();
+  // Error_Handler();
   /* USER CODE END 2 */
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
   while (1)
   {
+    // char buf[10];
+    // __itoa(k++, buf, 10);
+    // strcpy(send_buffer + strlen("Alliance Forwarding Device"), buf);
+    USBD_AUDIO_fops_FS.Receive(recv_buffer, &len);
+    memcpy(send_buffer + 4, recv_buffer, 6);
+    USBD_AUDIO_fops_FS.Transmit(send_buffer, 0x1e0);
+    HAL_Delay(1);
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */

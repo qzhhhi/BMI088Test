@@ -122,6 +122,8 @@ static int8_t AUDIO_VolumeCtl_FS(uint8_t vol);
 static int8_t AUDIO_MuteCtl_FS(uint8_t cmd);
 static int8_t AUDIO_PeriodicTC_FS(uint8_t* pbuf, uint32_t size, uint8_t cmd);
 static int8_t AUDIO_GetState_FS(void);
+static void Receive_FS(uint8_t* buffer, uint32_t* size);
+static void Transmit_FS(uint8_t* buffer, uint32_t size);
 
 /* USER CODE BEGIN PRIVATE_FUNCTIONS_DECLARATION */
 
@@ -132,9 +134,8 @@ static int8_t AUDIO_GetState_FS(void);
  */
 
 USBD_AUDIO_ItfTypeDef USBD_AUDIO_fops_FS = {
-    AUDIO_Init_FS,    AUDIO_DeInit_FS,     AUDIO_AudioCmd_FS, AUDIO_VolumeCtl_FS,
-    AUDIO_MuteCtl_FS, AUDIO_PeriodicTC_FS, AUDIO_GetState_FS,
-};
+    AUDIO_Init_FS,       AUDIO_DeInit_FS,   AUDIO_AudioCmd_FS, AUDIO_VolumeCtl_FS, AUDIO_MuteCtl_FS,
+    AUDIO_PeriodicTC_FS, AUDIO_GetState_FS, Receive_FS,        Transmit_FS};
 
 /* Private functions ---------------------------------------------------------*/
 /**
@@ -255,7 +256,17 @@ void HalfTransfer_CallBack_FS(void) {
 }
 
 /* USER CODE BEGIN PRIVATE_FUNCTIONS_IMPLEMENTATION */
+void Receive_FS(uint8_t* buffer, uint32_t* size) {
+    USBD_AUDIO_Sync(&hUsbDeviceFS, AUDIO_OFFSET_FULL);
+    USBD_AUDIO_HandleTypeDef* haud = (USBD_AUDIO_HandleTypeDef*)hUsbDeviceFS.pClassData;
+    memcpy(buffer, haud->rx_buffer, AUDIO_TOTAL_BUF_SIZE);
 
+    (void)USBD_LL_PrepareReceive(&hUsbDeviceFS, AUDIO_OUT_EP, haud->rx_buffer, AUDIO_OUT_PACKET);
+}
+void Transmit_FS(uint8_t* buffer, uint32_t size) {
+    USBD_AUDIO_HandleTypeDef* haud = (USBD_AUDIO_HandleTypeDef*)hUsbDeviceFS.pClassData;
+    memcpy(haud->tx_buffer, buffer, size);
+}
 /* USER CODE END PRIVATE_FUNCTIONS_IMPLEMENTATION */
 
 /**

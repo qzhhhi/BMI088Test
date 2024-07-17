@@ -59,11 +59,14 @@ extern "C" {
 #ifndef AUDIO_OUT_EP
 #define AUDIO_OUT_EP 0x01U
 #endif /* AUDIO_OUT_EP */
+#ifndef AUDIO_IN_EP
+#define AUDIO_IN_EP 0x81U
+#endif /* AUDIO_IN_EP */
 
-#define USB_AUDIO_CONFIG_DESC_SIZ           0x6DU
+#define USB_AUDIO_CONFIG_DESC_SIZ           0x29U
 #define AUDIO_INTERFACE_DESC_SIZE           0x09U
 #define USB_AUDIO_DESC_SIZ                  0x09U
-#define AUDIO_STANDARD_ENDPOINT_DESC_SIZE   0x09U
+#define AUDIO_STANDARD_ENDPOINT_DESC_SIZE   0x07U
 #define AUDIO_STREAMING_ENDPOINT_DESC_SIZE  0x07U
 
 #define AUDIO_DESCRIPTOR_TYPE               0x21U
@@ -103,12 +106,12 @@ extern "C" {
 #define AUDIO_OUT_TC                        0x01U
 #define AUDIO_IN_TC                         0x02U
 
-#define AUDIO_OUT_PACKET                    (uint16_t)(((USBD_AUDIO_FREQ * 2U * 2U) / 1000U))
+#define AUDIO_OUT_PACKET                    ((uint16_t)0x190U)
 #define AUDIO_DEFAULT_VOLUME                70U
 
 /* Number of sub-packets in the audio transfer buffer. You can modify this value but always make
   sure that it is an even number and higher than 3 */
-#define AUDIO_OUT_PACKET_NUM                80U
+#define AUDIO_OUT_PACKET_NUM                1U
 /* Total size of the audio transfer buffer */
 #define AUDIO_TOTAL_BUF_SIZE                ((uint16_t)(AUDIO_OUT_PACKET * AUDIO_OUT_PACKET_NUM))
 
@@ -141,7 +144,8 @@ typedef struct {
 
 typedef struct {
     uint32_t alt_setting;
-    uint8_t buffer[AUDIO_TOTAL_BUF_SIZE];
+    uint8_t rx_buffer[AUDIO_TOTAL_BUF_SIZE];
+    uint8_t tx_buffer[AUDIO_TOTAL_BUF_SIZE];
     AUDIO_OffsetTypeDef offset;
     uint8_t rd_enable;
     uint16_t rd_ptr;
@@ -157,6 +161,8 @@ typedef struct {
     int8_t (*MuteCtl)(uint8_t cmd);
     int8_t (*PeriodicTC)(uint8_t* pbuf, uint32_t size, uint8_t cmd);
     int8_t (*GetState)(void);
+    void (*Receive)(uint8_t* pbuf, uint32_t* size);
+    void (*Transmit)(uint8_t* pbuf, uint32_t size);
 } USBD_AUDIO_ItfTypeDef;
 
 /*
@@ -292,9 +298,9 @@ void USBD_AUDIO_Sync(USBD_HandleTypeDef* pdev, AUDIO_OffsetTypeDef offset);
 uint32_t USBD_AUDIO_GetEpPcktSze(USBD_HandleTypeDef* pdev, uint8_t If, uint8_t Ep);
 #endif /* USE_USBD_COMPOSITE */
 
-/**
- * @}
- */
+       /**
+        * @}
+        */
 
 #ifdef __cplusplus
 }
