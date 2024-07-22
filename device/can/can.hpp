@@ -19,6 +19,8 @@ extern volatile int free_count;
 
 class Can : private utility::Immovable {
 public:
+    using Lazy = utility::Lazy<Can, CAN_HandleTypeDef*, uint32_t, uint32_t>;
+
     struct __attribute__((packed)) Data {
         uint32_t id;
         uint8_t data[8];
@@ -102,8 +104,8 @@ private:
     CAN_RxHeaderTypeDef hal_can_rx_header_;
 };
 
-inline utility::Lazy<Can, CAN_HandleTypeDef*, uint32_t, uint32_t> can1{&hcan1, 0, 14};
-inline utility::Lazy<Can, CAN_HandleTypeDef*, uint32_t, uint32_t> can2{&hcan2, 14, 14};
+inline constinit Can::Lazy can1{&hcan1, 0, 14};
+inline constinit Can::Lazy can2{&hcan2, 14, 14};
 
 } // namespace can
 } // namespace device

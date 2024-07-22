@@ -191,7 +191,7 @@ private:
     size_t init_rx_size_;
 };
 
-inline Accelerometer::Lazy accelerometer(&spi1);
+inline constinit Accelerometer::Lazy accelerometer(&spi1);
 
 } // namespace bmi088
 } // namespace spi

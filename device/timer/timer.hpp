@@ -19,7 +19,7 @@ public:
     auto get_tick() { return __HAL_TIM_GET_COUNTER(hal_timer_handle); }
 };
 
-inline Timer<&htim2>::Lazy timer2;
+inline constinit Timer<&htim2>::Lazy timer2;
 
 } // namespace timer
 } // namespace device

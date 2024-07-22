@@ -6,8 +6,8 @@ extern "C" {
 
 void HAL_SPI_TxRxCpltCallback(SPI_HandleTypeDef* hspi) {
     if (hspi == &hspi1) {
-        device::spi::spi1.weak_execute(
-            [](device::spi::Spi* spi) { spi->transmit_receive_callback(); });
+        if (auto spi = device::spi::spi1.try_get())
+            spi->transmit_receive_callback();
     }
 }
 

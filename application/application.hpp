@@ -12,4 +12,4 @@ public:
     void main();
 };
 
-inline Application::Lazy application;
+inline constinit Application::Lazy application;

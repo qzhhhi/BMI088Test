@@ -3,7 +3,6 @@
 #include "device/usb/cdc/package.hpp"
 #include "glue/double_buffer.hpp"
 #include "usart.h"
-#include "utility/interrupt_lock.hpp"
 #include "utility/lazy.hpp"
 #include <cassert>
 #include <cstdint>
@@ -13,9 +12,10 @@ namespace uart {
 
 class Uart {
 public:
-    Uart(UART_HandleTypeDef* hal_uart_handle)
+    using Lazy = utility::Lazy<Uart, UART_HandleTypeDef*>;
+
+    explicit Uart(UART_HandleTypeDef* hal_uart_handle)
         : hal_uart_handle_(hal_uart_handle) {
-        utility::InterruptLockGuard guard;
         assert(
             HAL_UARTEx_ReceiveToIdle_IT(
                 hal_uart_handle_, uart_receive_buffer, sizeof(uart_receive_buffer))
@@ -42,7 +42,7 @@ private:
     uint8_t uart_receive_buffer[128];
 };
 
-inline utility::Lazy<Uart, UART_HandleTypeDef*> uart3{&huart3};
+inline constinit Uart::Lazy uart3{&huart3};
 
 } // namespace uart
 } // namespace device

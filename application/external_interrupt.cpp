@@ -10,11 +10,11 @@ extern "C" {
 
 void HAL_GPIO_EXTI_Callback(uint16_t gpio_pin) {
     if (gpio_pin == INT1_ACC_Pin) {
-        device::spi::bmi088::accelerometer.weak_execute(
-            [](device::spi::bmi088::Accelerometer* accel) { accel->data_ready_callback(); });
+        if (auto accel = device::spi::bmi088::accelerometer.try_get())
+            accel->data_ready_callback();
     } else if (gpio_pin == INT1_GYRO_Pin) {
-        device::spi::bmi088::gyroscope.weak_execute(
-            [](device::spi::bmi088::Gyroscope* gyro) { gyro->data_ready_callback(); });
+        if (auto gyro = device::spi::bmi088::gyroscope.try_get())
+            gyro->data_ready_callback();
     }
 }
 

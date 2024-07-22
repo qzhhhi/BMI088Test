@@ -190,7 +190,7 @@ private:
     size_t init_rx_size_;
 };
 
-inline Gyroscope::Lazy gyroscope(&spi1);
+inline constinit Gyroscope::Lazy gyroscope(&spi1);
 
 } // namespace bmi088
 } // namespace spi

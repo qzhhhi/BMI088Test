@@ -9,8 +9,8 @@ void HAL_UARTEx_RxEventCallback(UART_HandleTypeDef* hal_uart_handle, uint16_t si
         return;
     if (hal_uart_handle->Instance == USART1) {
     } else if (hal_uart_handle->Instance == USART3) {
-        device::uart::uart3.weak_execute(
-            [size](device::uart::Uart* self) { self->receive_callback(size); });
+        if (auto uart = device::uart::uart3.try_get())
+            uart->receive_callback(size);
     } else if (hal_uart_handle->Instance == USART6) {
     }
 }
