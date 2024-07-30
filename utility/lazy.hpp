@@ -14,6 +14,13 @@ public:
         : init_status_(InitStatus::UNINITIALIZED)
         , construction_arguments{std::move(args)...} {}
 
+    constexpr ~Lazy() {
+        if (init_status_ == InitStatus::UNINITIALIZED)
+            std::destroy_at(std::addressof(construction_arguments));
+        else if (init_status_ == InitStatus::INITIALIZED)
+            std::destroy_at(std::addressof(object));
+    }
+
     constexpr T* get() { return std::addressof(make_or_get_object()); }
 
     constexpr T* operator->() { return std::addressof(make_or_get_object()); }
