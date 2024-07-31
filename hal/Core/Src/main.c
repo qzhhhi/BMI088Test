@@ -17,19 +17,17 @@
   */
 /* USER CODE END Header */
 /* Includes ------------------------------------------------------------------*/
-#include <assert.h>
-
-#include "can.h"
-#include "gpio.h"
 #include "main.h"
+#include "can.h"
 #include "spi.h"
 #include "tim.h"
 #include "usart.h"
 #include "usb_device.h"
+#include "gpio.h"
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-
+#include <assert.h>
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -70,6 +68,7 @@ void SystemClock_Config(void);
   */
 int main(void)
 {
+
   /* USER CODE BEGIN 1 */
 
   /* USER CODE END 1 */
