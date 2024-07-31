@@ -25,7 +25,7 @@ target("application", function()
     on_load("script.read_hal_makefile")
 
     -- 添加源文件和头文件
-    add_files("application/**.cpp", "device/**.cpp", "utility/**.cpp")
+    add_files("app/**.cpp", "device/**.cpp", "utility/**.cpp")
     add_includedirs(".")
 
     -- 在任何模式下都生成调试信息
