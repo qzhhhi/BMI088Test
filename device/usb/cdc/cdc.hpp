@@ -34,8 +34,7 @@ public:
     }
 
     bool try_transmit() {
-        auto writing      = buffer_writing_.load(std::memory_order::relaxed);
-        auto written_size = transmit_buffers_[writing].written_size();
+        auto writing = buffer_writing_.load(std::memory_order::relaxed);
         if (transmit_buffers_[writing].written_size() <= 1)
             return false;
 
@@ -47,8 +46,11 @@ public:
 
         auto data = const_cast<uint8_t*>(
             reinterpret_cast<const uint8_t*>(transmit_buffers_[writing].data()));
+
+        // Note: Must read written_size again here to avoid packet loss.
         assert(
-            USBD_CDC_SetTxBuffer(&hUsbDeviceFS, data, written_size) == USBD_OK
+            USBD_CDC_SetTxBuffer(&hUsbDeviceFS, data, transmit_buffers_[writing].written_size())
+                == USBD_OK
             && USBD_CDC_TransmitPacket(&hUsbDeviceFS) == USBD_OK);
 
         return true;

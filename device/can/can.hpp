@@ -72,16 +72,11 @@ public:
         uint32_t tsr = hcan->Instance->TSR;
         auto free_mailbox_count =
             !!(tsr & CAN_TSR_TME0) + !!(tsr & CAN_TSR_TME1) + !!(tsr & CAN_TSR_TME2);
-
-        // TODO: Try to remove this part
-        if (free_mailbox_count == 3)
-            free_mailbox_count = 1;
-        else
-            free_mailbox_count = 0;
-
+        
         return transmit_buffer_.pop_front_multi(
-            [this, tsr](TransmitMailboxData&& mailbox_data) {
-                auto target_mailbox_index = (tsr & CAN_TSR_CODE) >> CAN_TSR_CODE_Pos;
+            [this, hcan](TransmitMailboxData&& mailbox_data) {
+                auto target_mailbox_index =
+                    (hcan->Instance->TSR & CAN_TSR_CODE) >> CAN_TSR_CODE_Pos;
                 assert(target_mailbox_index <= 2);
 
                 auto& target_mailbox = hal_can_handle_->Instance->sTxMailBox[target_mailbox_index];
