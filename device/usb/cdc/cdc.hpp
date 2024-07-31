@@ -1,14 +1,15 @@
 #pragma once
 
+#include <cassert>
 #include <cstdint>
 
 #include <atomic>
 
 #include <usbd_cdc.h>
+#include <usbd_def.h>
 
-#include "device/can/can.hpp"
-#include "device/usb/cdc/package.hpp"
-#include "usbd_def.h"
+#include "utility/interrupt_safe_buffer.hpp"
+#include "utility/lazy.hpp"
 
 namespace device::usb {
 
@@ -16,11 +17,45 @@ extern "C" {
 extern USBD_HandleTypeDef hUsbDeviceFS;
 }
 
-class Cdc {
+class Cdc : utility::Immovable {
 public:
-    Cdc() = delete;
+    using Lazy = utility::Lazy<Cdc>;
 
-    static bool ready() {
+    Cdc() {
+        for (auto& buffer : transmit_buffers_) {
+            std::byte* start_of_packet = buffer.allocate(1);
+            assert(start_of_packet);
+            *start_of_packet = std::byte{0xae};
+        }
+    };
+
+    utility::InterruptSafeBuffer<64>& get_transmit_buffer() {
+        return transmit_buffers_[buffer_writing_.load(std::memory_order::relaxed)];
+    }
+
+    bool try_transmit() {
+        auto writing      = buffer_writing_.load(std::memory_order::relaxed);
+        auto written_size = transmit_buffers_[writing].written_size();
+        if (transmit_buffers_[writing].written_size() <= 1)
+            return false;
+
+        if (!device_ready())
+            return false;
+
+        transmit_buffers_[!writing].set_written_size(1);
+        buffer_writing_.store(!writing, std::memory_order::relaxed);
+
+        auto data = const_cast<uint8_t*>(
+            reinterpret_cast<const uint8_t*>(transmit_buffers_[writing].data()));
+        assert(
+            USBD_CDC_SetTxBuffer(&hUsbDeviceFS, data, written_size) == USBD_OK
+            && USBD_CDC_TransmitPacket(&hUsbDeviceFS) == USBD_OK);
+
+        return true;
+    }
+
+private:
+    static bool device_ready() {
         // The value of cdc_handle remains null until a USB connection occurs, and an interrupt
         // modifies it to a non-zero value. Therefore, atomic loading must be used here to prevent
         // compiler optimization.
@@ -35,61 +70,18 @@ public:
         return static_cast<USBD_CDC_HandleTypeDef*>(hal_cdc_handle)->TxState == 0U;
     }
 
-    template <typename T>
-    static void transmit(TransmitPackage<T>& package) {
-        USBD_CDC_SetTxBuffer(&hUsbDeviceFS, const_cast<uint8_t*>(package.c_str()), package.size());
-        USBD_CDC_TransmitPacket(&hUsbDeviceFS);
-    }
+    friend inline int8_t hal_cdc_init_callback();
+    friend inline int8_t hal_cdc_deinit_callback();
+    friend inline int8_t hal_cdc_control_callback(uint8_t, uint8_t*, uint16_t);
+    friend inline int8_t hal_cdc_receive_callback(uint8_t*, uint32_t*);
+    friend inline int8_t hal_cdc_transmit_complete_callback(uint8_t*, uint32_t*, uint8_t);
 
-private:
-    friend constexpr USBD_CDC_ItfTypeDef get_hal_cdc_interfaces();
+    alignas(int) inline static constinit std::byte receive_buffer_[64];
 
-    static int8_t hal_cdc_init_callback() {
-        USBD_CDC_SetRxBuffer(&hUsbDeviceFS, receive_package_.c_str());
-        return USBD_OK;
-    }
-
-    static int8_t hal_cdc_deinit_callback() { return USBD_OK; }
-
-    static int8_t hal_cdc_control_callback(uint8_t command, uint8_t* buffer, uint16_t length) {
-        return USBD_OK;
-    }
-
-    // NOLINTNEXTLINE(readability-non-const-parameter) because the requirement of HAL api.
-    static int8_t hal_cdc_receive_callback(uint8_t* buffer, uint32_t* length) {
-        do {
-            if (*length <= 4)
-                break;
-            if (!receive_package_.verify())
-                break;
-            if (receive_package_.size() != *length)
-                break;
-
-            if (receive_package_.type() == 0x11) {
-                if (auto can = device::can::can1.try_get()) {
-                    can->try_transmit(receive_package_.data<device::can::Can::Data>());
-                }
-            } else if (receive_package_.type() == 0x12) {
-                if (auto can = device::can::can2.try_get()) {
-                    can->try_transmit(receive_package_.data<device::can::Can::Data>());
-                }
-            }
-        } while (false);
-
-        USBD_CDC_SetRxBuffer(&hUsbDeviceFS, receive_package_.c_str());
-        USBD_CDC_ReceivePacket(&hUsbDeviceFS);
-        return USBD_OK;
-    }
-
-    static int8_t hal_cdc_transmit_complete_callback(
-        uint8_t* buffer, uint32_t* length, uint8_t endpoint_num) {
-        return USBD_OK;
-    }
-
-    inline static ReceivePackage receive_package_;
-
-    // std::atomic<bool> task_created_;
-    // utility::memory::TypedPool<Package>::UniquePtr package_;
+    utility::InterruptSafeBuffer<64> transmit_buffers_[2];
+    std::atomic<uint8_t> buffer_writing_ = 0;
 };
+
+inline constinit Cdc::Lazy cdc;
 
 } // namespace device::usb
