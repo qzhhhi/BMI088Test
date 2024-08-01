@@ -3,6 +3,8 @@
 #include <main.h>
 
 #include "device/can/can.hpp"
+#include "device/spi/bmi088/accel.hpp"
+#include "device/spi/bmi088/gyro.hpp"
 #include "device/uart/uart.hpp"
 #include "device/usb/cdc/cdc.hpp"
 
@@ -19,6 +21,11 @@ app::App::App() = default;
     auto& uart1     = *device::uart::uart1;
     auto& uart2     = *device::uart::uart2;
     auto& uart_dbus = *device::uart::uart_dbus;
+    auto& accel     = *device::spi::bmi088::accelerometer;
+    auto& gyro      = *device::spi::bmi088::gyroscope;
+
+    (void)accel;
+    (void)gyro;
 
     while (true) {
         cdc.try_transmit();

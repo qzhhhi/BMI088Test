@@ -7,18 +7,14 @@
 #include <spi.h>
 #include <usbd_cdc.h>
 
+#include "device/spi/bmi088/field.hpp"
 #include "device/spi/spi.hpp"
 #include "device/timer/us_delay.hpp"
-#include "device/usb/cdc/package.hpp"
-#include "glue/double_buffer.hpp"
+#include "device/usb/cdc/cdc.hpp"
+#include "utility/interrupt_safe_buffer.hpp"
+namespace device::spi::bmi088 {
 
-extern float acc_x, acc_y, acc_z;
-
-namespace device {
-namespace spi {
-namespace bmi088 {
-
-class Gyroscope : SpiModuleInterface {
+class Gyroscope final : SpiModuleInterface {
 public:
     using Lazy = utility::Lazy<Gyroscope, Spi::Lazy*>;
 
@@ -46,12 +42,7 @@ public:
         int16_t z;
     };
 
-    struct __attribute__((packed)) ImuData {
-        int16_t gyro_x, gyro_y, gyro_z;
-        int16_t acc_x, acc_y, acc_z;
-    };
-
-    Gyroscope(
+    explicit Gyroscope(
         Spi::Lazy* spi, DataRange range = DataRange::_2000,
         DataRateAndBandwidth rate = DataRateAndBandwidth::_2000_230)
         : SpiModuleInterface(CS1_GYRO_GPIO_Port, CS1_GYRO_Pin)
@@ -113,35 +104,29 @@ public:
         // Switch the main power mode into normal mode.
         assert(write_with_confirm(RegisterAddress::GYRO_LPM1, 0x00));
 
-        buffer.construct_each();
-
         initialized_ = true;
     }
 
-    static constexpr auto hal_spi_handle = &hspi1;
-
-    void transmit_receive_callback(uint8_t* rx_buffer, size_t size) override {
-        if (initialized_) {
-            assert(size == sizeof(Data) + 1);
-            auto& data = *reinterpret_cast<Data*>(rx_buffer + 1);
-            auto& buf  = buffer.start_writing();
-
-            buf.data().gyro_x = data.x;
-            buf.data().gyro_y = data.y;
-            buf.data().gyro_z = data.z;
-
-            buffer.finish_writing();
-        } else {
-            init_rx_buffer_ = rx_buffer;
-            init_rx_size_   = size;
-        }
-    }
+private:
+    friend void ::HAL_GPIO_EXTI_Callback(uint16_t);
 
     void data_ready_callback() {
         read<SpiTransmitReceiveMode::BLOCK>(RegisterAddress::RATE_X_LSB, 6);
     }
 
-    glue::DoubleBuffer<usb::TransmitPackage<ImuData>> buffer;
+protected:
+    void transmit_receive_callback(uint8_t* rx_buffer, size_t size) override {
+        if (initialized_) {
+            assert(size == sizeof(Data) + 1);
+            if (auto cdc = usb::cdc.try_get()) {
+                auto& data = *std::launder(reinterpret_cast<Data*>(rx_buffer + 1));
+                read_device_write_buffer(cdc->get_transmit_buffer(), data);
+            }
+        } else {
+            init_rx_buffer_ = rx_buffer;
+            init_rx_size_   = size;
+        }
+    }
 
 private:
     enum class RegisterAddress : uint8_t {
@@ -182,6 +167,21 @@ private:
         return false;
     }
 
+    static bool
+        read_device_write_buffer(utility::InterruptSafeBuffer<64>& buffer_wrapper, Data& data) {
+        if (std::byte* buffer = buffer_wrapper.allocate(sizeof(FieldHeader) + sizeof(Data))) {
+            *buffer = std::bit_cast<std::byte>(FieldHeader::gyroscope());
+            buffer += sizeof(FieldHeader);
+
+            new (buffer) Data{data};
+            buffer += sizeof(Data);
+
+            return true;
+        }
+
+        return false;
+    }
+
     Spi* const spi_;
 
     bool initialized_;
@@ -192,6 +192,4 @@ private:
 
 inline constinit Gyroscope::Lazy gyroscope(&spi1);
 
-} // namespace bmi088
-} // namespace spi
-} // namespace device
+} // namespace device::spi::bmi088

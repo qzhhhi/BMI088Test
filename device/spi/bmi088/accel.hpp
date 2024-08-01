@@ -7,17 +7,14 @@
 #include <spi.h>
 #include <usbd_cdc.h>
 
+#include "device/spi/bmi088/field.hpp"
 #include "device/spi/spi.hpp"
 #include "device/timer/us_delay.hpp"
-#include "glue/double_buffer.hpp"
+#include "device/usb/cdc/cdc.hpp"
 
-extern float acc_x, acc_y, acc_z;
+namespace device::spi::bmi088 {
 
-namespace device {
-namespace spi {
-namespace bmi088 {
-
-class Accelerometer : SpiModuleInterface {
+class Accelerometer final : SpiModuleInterface {
 public:
     using Lazy = utility::Lazy<Accelerometer, Spi::Lazy*>;
 
@@ -33,13 +30,14 @@ public:
         _1600 = 0x0C
     };
 
-    struct Data {
+    struct __attribute__((packed)) Data {
         int16_t x;
         int16_t y;
         int16_t z;
     };
 
-    Accelerometer(Spi::Lazy* spi, Range range = Range::_6G, DataRate data_rate = DataRate::_1600)
+    explicit Accelerometer(
+        Spi::Lazy* spi, Range range = Range::_6G, DataRate data_rate = DataRate::_1600)
         : SpiModuleInterface(CS1_ACCEL_GPIO_Port, CS1_ACCEL_Pin)
         , spi_(spi->get())
         , initialized_(false)
@@ -106,35 +104,26 @@ public:
         initialized_ = true;
     }
 
-    static constexpr auto hal_spi_handle = &hspi1;
-
-    void transmit_receive_callback(uint8_t* rx_buffer, size_t size) override {
-        if (initialized_) {
-            assert(size == sizeof(Data) + 2);
-            auto& data = *reinterpret_cast<Data*>(rx_buffer + 2);
-
-            auto& writing = buffer.start_writing();
-            writing.x = data.x;
-            writing.y = data.y;
-            writing.z = data.z;
-            buffer.finish_writing();
-
-
-            // if (auto msg = topic.publish()) {
-            //     msg->init<PackageDymaticPart>(0x31, 0, data.x, data.y, data.z);
-            // }
-        } else {
-            init_rx_buffer_ = rx_buffer;
-            init_rx_size_   = size;
-        }
-    }
+private:
+    friend void ::HAL_GPIO_EXTI_Callback(uint16_t);
 
     void data_ready_callback() {
         read<SpiTransmitReceiveMode::BLOCK>(RegisterAddress::ACC_X_LSB, 6);
     }
 
-    // glue::topic::Topic<usb::Package> topic;
-    glue::DoubleBuffer<Data> buffer;
+protected:
+    void transmit_receive_callback(uint8_t* rx_buffer, size_t size) override {
+        if (initialized_) {
+            assert(size == sizeof(Data) + 2);
+            if (auto cdc = usb::cdc.try_get()) {
+                auto& data = *std::launder(reinterpret_cast<Data*>(rx_buffer + 2));
+                read_device_write_buffer(cdc->get_transmit_buffer(), data);
+            }
+        } else {
+            init_rx_buffer_ = rx_buffer;
+            init_rx_size_   = size;
+        }
+    }
 
 private:
     enum class RegisterAddress : uint8_t {
@@ -183,6 +172,21 @@ private:
         return false;
     }
 
+    static bool
+        read_device_write_buffer(utility::InterruptSafeBuffer<64>& buffer_wrapper, Data& data) {
+        if (std::byte* buffer = buffer_wrapper.allocate(sizeof(FieldHeader) + sizeof(Data))) {
+            *buffer = std::bit_cast<std::byte>(FieldHeader::accelerometer());
+            buffer += sizeof(FieldHeader);
+
+            new (buffer) Data{data};
+            buffer += sizeof(Data);
+
+            return true;
+        }
+
+        return false;
+    }
+
     Spi* const spi_;
 
     bool initialized_;
@@ -193,6 +197,4 @@ private:
 
 inline constinit Accelerometer::Lazy accelerometer(&spi1);
 
-} // namespace bmi088
-} // namespace spi
-} // namespace device
+} // namespace device::spi::bmi088
