@@ -25,7 +25,7 @@ public:
         for (auto& buffer : transmit_buffers_) {
             std::byte* start_of_packet = buffer.allocate(1);
             assert(start_of_packet);
-            *start_of_packet = std::byte{0xae};
+            *start_of_packet = std::byte{0xAE};
         }
     };
 
@@ -42,7 +42,9 @@ public:
             return false;
 
         transmit_buffers_[!writing].set_written_size(1);
+        std::atomic_signal_fence(std::memory_order::release);
         buffer_writing_.store(!writing, std::memory_order::relaxed);
+        std::atomic_signal_fence(std::memory_order::release);
 
         auto data = const_cast<uint8_t*>(
             reinterpret_cast<const uint8_t*>(transmit_buffers_[writing].data()));

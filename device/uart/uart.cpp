@@ -1,16 +1,31 @@
 #include "uart.hpp"
-#include "main.h"
-#include "stm32f4xx_hal_gpio.h"
-#include <cassert>
+
+#include "device/usb/cdc/cdc.hpp"
 
 void HAL_UARTEx_RxEventCallback(UART_HandleTypeDef* hal_uart_handle, uint16_t size) {
-    HAL_GPIO_WritePin(LED_G_GPIO_Port, LED_G_Pin, GPIO_PIN_SET);
     if (__HAL_UART_GET_FLAG(hal_uart_handle, UART_FLAG_IDLE))
         return;
-    if (hal_uart_handle->Instance == USART1) {
-    } else if (hal_uart_handle->Instance == USART3) {
-        if (auto uart = device::uart::uart3.try_get())
-            uart->receive_callback(size);
-    } else if (hal_uart_handle->Instance == USART6) {
+
+    using namespace device;
+    uart::Uart::Lazy* uart_lazy;
+    usb::field::StatusId field_id;
+
+    if (hal_uart_handle == &huart1) {
+        uart_lazy = &uart::uart2;
+        field_id  = usb::field::StatusId::UART2_;
+    } else if (hal_uart_handle == &huart3) {
+        uart_lazy = &uart::uart_dbus;
+        field_id  = usb::field::StatusId::UART3_;
+    } else if (hal_uart_handle == &huart6) {
+        uart_lazy = &uart::uart1;
+        field_id  = usb::field::StatusId::UART1_;
+    } else {
+        return;
+    }
+
+    if (auto uart = uart_lazy->try_get()) {
+        if (auto cdc = usb::cdc.try_get()) {
+            uart->read_device_write_buffer(cdc->get_transmit_buffer(), field_id, size);
+        }
     }
 }

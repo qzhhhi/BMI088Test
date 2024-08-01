@@ -1,48 +1,134 @@
 #pragma once
 
-#include "device/usb/cdc/package.hpp"
-#include "glue/double_buffer.hpp"
-#include "usart.h"
-#include "utility/lazy.hpp"
+#include <atomic>
 #include <cassert>
 #include <cstdint>
+#include <cstring>
 
-namespace device {
-namespace uart {
+#include <usart.h>
+
+#include "device/usb/field.hpp"
+#include "utility/interrupt_safe_buffer.hpp"
+#include "utility/lazy.hpp"
+
+namespace device::uart {
 
 class Uart {
 public:
-    using Lazy = utility::Lazy<Uart, UART_HandleTypeDef*>;
+    using Lazy = utility::Lazy<Uart, UART_HandleTypeDef*, size_t>;
 
-    explicit Uart(UART_HandleTypeDef* hal_uart_handle)
-        : hal_uart_handle_(hal_uart_handle) {
+    explicit Uart(UART_HandleTypeDef* hal_uart_handle, uint16_t max_receive_size)
+        : hal_uart_handle_(hal_uart_handle)
+        , max_receive_size_(max_receive_size) {
+        assert(max_receive_size_ <= 64);
         assert(
             HAL_UARTEx_ReceiveToIdle_IT(
-                hal_uart_handle_, uart_receive_buffer, sizeof(uart_receive_buffer))
+                hal_uart_handle_, reinterpret_cast<uint8_t*>(receive_buffer_), max_receive_size_)
+            == HAL_OK);
+    }
+
+    bool read_buffer_write_device(std::byte*& buffer) {
+        auto& header = *std::launder(reinterpret_cast<FieldHeader*>(buffer));
+        buffer += sizeof(FieldHeader);
+
+        uint8_t size = header.data_size;
+        if (!size)
+            size = static_cast<uint8_t>(*buffer++);
+
+        auto& transmit_buffer = transmit_buffers_[buffer_writing_.load(std::memory_order::relaxed)];
+        uint8_t written_size  = transmit_buffer.written_size.load(std::memory_order::relaxed);
+
+        uint8_t size_allowed = size;
+        if (size_allowed > sizeof(transmit_buffer.data) - written_size)
+            size_allowed = sizeof(transmit_buffer.data) - written_size;
+
+        transmit_buffer.written_size.store(written_size + size_allowed, std::memory_order::relaxed);
+        std::memcpy(&transmit_buffer.data[written_size], buffer, size_allowed);
+        buffer += size;
+
+        return size_allowed == size;
+    }
+
+    bool try_transmit() {
+        auto writing = buffer_writing_.load(std::memory_order::relaxed);
+        if (transmit_buffers_[writing].written_size.load(std::memory_order::relaxed) == 0)
+            return false;
+
+        if (!device_ready())
+            return false;
+
+        transmit_buffers_[!writing].written_size.store(0, std::memory_order::relaxed);
+        std::atomic_signal_fence(std::memory_order::release);
+        buffer_writing_.store(!writing, std::memory_order::relaxed);
+        std::atomic_signal_fence(std::memory_order::release);
+
+        // Note: Must read written_size again here to avoid data loss.
+        assert(
+            HAL_UART_Transmit_IT(
+                hal_uart_handle_, reinterpret_cast<uint8_t*>(transmit_buffers_[writing].data),
+                transmit_buffers_[writing].written_size.load(std::memory_order::relaxed))
             == HAL_OK);
 
-        cdc_transmit_buffer.construct_each();
+        return true;
     }
-
-    void receive_callback(uint16_t size) {
-        auto& buf = cdc_transmit_buffer.start_writing();
-        buf.reset();
-        buf.append(uart_receive_buffer, size);
-        cdc_transmit_buffer.finish_writing();
-
-        HAL_UARTEx_ReceiveToIdle_IT(
-            hal_uart_handle_, uart_receive_buffer, sizeof(uart_receive_buffer));
-    }
-
-    glue::DoubleBuffer<device::usb::TransmitPackage<device::usb::Dynamic>> cdc_transmit_buffer;
 
 private:
+    friend void ::HAL_UARTEx_RxEventCallback(UART_HandleTypeDef*, uint16_t);
+
+    bool device_ready() { return hal_uart_handle_->gState == HAL_UART_STATE_READY; }
+
+    bool read_device_write_buffer(
+        utility::InterruptSafeBuffer<64>& buffer_wrapper, usb::field::StatusId field_id,
+        uint16_t size) {
+        assert(size);
+
+        std::byte* buffer = buffer_wrapper.allocate(sizeof(FieldHeader) + (size > 15) + size);
+        if (buffer) {
+            // Write field header
+            auto& header = *new (buffer) FieldHeader{};
+            buffer += sizeof(FieldHeader);
+            header.field_id = static_cast<uint8_t>(field_id);
+            if (size <= 15) {
+                // Store 4-bit size and field-id together
+                header.data_size = size;
+            } else {
+                // Store size to a separate byte
+                header.data_size = 0;
+                *(buffer++)      = static_cast<std::byte>(size);
+            }
+
+            // Write received data
+            std::memcpy(buffer, receive_buffer_, size);
+            buffer += size;
+        }
+
+        assert(
+            HAL_UARTEx_ReceiveToIdle_IT(
+                hal_uart_handle_, reinterpret_cast<uint8_t*>(receive_buffer_), max_receive_size_)
+            == HAL_OK);
+
+        return static_cast<bool>(buffer);
+    }
+
     UART_HandleTypeDef* hal_uart_handle_;
 
-    uint8_t uart_receive_buffer[128];
+    struct __attribute__((packed)) FieldHeader {
+        uint8_t field_id  : 4;
+        uint8_t data_size : 4;
+    };
+
+    std::byte receive_buffer_[64];
+    uint16_t max_receive_size_;
+
+    struct {
+        std::atomic<uint8_t> written_size = 0;
+        std::byte data[128];
+    } transmit_buffers_[2];
+    std::atomic<uint8_t> buffer_writing_ = 0;
 };
 
-inline constinit Uart::Lazy uart3{&huart3};
+inline constinit Uart::Lazy uart1{&huart6, 15};
+inline constinit Uart::Lazy uart2{&huart1, 15};
+inline constinit Uart::Lazy uart_dbus{&huart3, 31};
 
-} // namespace uart
-} // namespace device
+} // namespace device::uart

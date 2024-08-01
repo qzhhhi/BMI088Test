@@ -1,6 +1,7 @@
 #include "cdc.hpp"
 
 #include "device/can/can.hpp"
+#include "device/uart/uart.hpp"
 #include "device/usb/field.hpp"
 
 namespace device::usb {
@@ -11,7 +12,6 @@ inline int8_t hal_cdc_init_callback() {
 }
 
 inline int8_t hal_cdc_deinit_callback() {
-    // TODO
     return USBD_OK;
 }
 
@@ -40,10 +40,18 @@ inline int8_t hal_cdc_receive_callback(uint8_t* buffer, uint32_t* length) {
         } else if (field_id == field::CommandId::CAN2_) {
             if (auto can = can::can2.try_get())
                 can->read_buffer_write_device(iterator);
+        } else if (field_id == field::CommandId::UART1_) {
+            if (auto uart = uart::uart1.try_get())
+                uart->read_buffer_write_device(iterator);
+        } else if (field_id == field::CommandId::UART2_) {
+            if (auto uart = uart::uart2.try_get())
+                uart->read_buffer_write_device(iterator);
+        } else if (field_id == field::CommandId::UART3_) {
+            if (auto uart = uart::uart_dbus.try_get())
+                uart->read_buffer_write_device(iterator);
         } else
             break;
     }
-
     assert(iterator == sentinel); // TODO
 
     USBD_CDC_SetRxBuffer(&hUsbDeviceFS, buffer);
